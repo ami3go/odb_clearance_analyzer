@@ -1,0 +1,49 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "odb-clearance-analyzer"
+version = "0.4.13"
+description = "ODB++ net-to-net copper clearance analyzer with Tkinter GUI and report export"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [
+  {name = "Alexandr Chasnyk"}
+]
+keywords = ["ODB++", "PCB", "clearance", "creepage", "DFM", "KiCad", "electronics"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Manufacturing",
+  "Intended Audience :: Developers",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Scientific/Engineering :: Electronic Design Automation (EDA)",
+]
+dependencies = [
+  "shapely>=2.0",
+  "openpyxl>=3.1",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.0",
+  "ruff>=0.4",
+]
+
+[project.scripts]
+odb-clearance-analyzer = "odb_clearance_analyzer.cli:main"
+odb-clearance-gui = "odb_clearance_analyzer.gui:main"
+
+[tool.setuptools]
+packages = ["odb_clearance_analyzer"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.setuptools.package-data]
+odb_clearance_analyzer = ["assets/app_icon.png", "assets/app_icon_small.png"]
