@@ -48,6 +48,8 @@ def analysis_config_to_profile(
             "metallic_particle_size_mm": float(config.metallic_particle_size_mm),
             "export_effective_max_voltage": bool(config.export_effective_max_voltage),
             "export_ipc2221a_max_voltage": bool(config.export_ipc2221a_max_voltage),
+            "isolation_settings": dict(getattr(config, "isolation_settings", {}) or {}),
+            "voltage_guessing": dict(getattr(config, "voltage_guessing", {}) or {"assignment_store_path": "net_voltage_assignments.json"}),
         },
     }
     if include_paths:
@@ -96,6 +98,8 @@ def profile_to_analysis_config(profile: dict[str, Any], *, base_config: Analysis
         metallic_particle_size_mm=float(get("metallic_particle_size_mm", base_config.metallic_particle_size_mm)),
         export_effective_max_voltage=bool(get("export_effective_max_voltage", base_config.export_effective_max_voltage)),
         export_ipc2221a_max_voltage=bool(get("export_ipc2221a_max_voltage", base_config.export_ipc2221a_max_voltage)),
+        isolation_settings=dict(get("isolation_settings", getattr(base_config, "isolation_settings", {}))),
+        voltage_guessing=dict(get("voltage_guessing", getattr(base_config, "voltage_guessing", {"assignment_store_path": "net_voltage_assignments.json"}))),
     )
 
 

@@ -21,6 +21,10 @@ The tool reconstructs same-layer copper geometry, measures net-to-net spacing, h
 - Supports IEC 60664-1 style effective-voltage screening.
 - Supports IEC 61558 / IEC 62368 isolation-barrier screening.
 - Supports JSON settings profiles for reproducible analysis.
+- Deterministic **Voltage Guessing**: classifies every net's voltage class/value from editable
+  name rules (no AI/LLM), with a keyboard review queue, waivers, revision import with
+  rename matching, project-local correction rules, review gates for exports, and full
+  undo — all persisted across restarts. See `docs/voltage_guessing_user_manual_v0.4.22.md`.
 
 ---
 
@@ -226,6 +230,26 @@ Enable effective Net-to-Net matrix:
 ```bash
 odb-clearance-analyzer path/to/board-odb.zip --output clearance_report --effective-air-gap-matrix
 ```
+
+Voltage guessing (deterministic, no AI):
+
+```bash
+# Guess all nets, persist the assignment store, write the 3 export files
+odb-clearance-analyzer board-odb.zip --output out --voltage-guess
+
+# CI gate: fail (exit 2) while unreviewed Critical assignments exist
+odb-clearance-analyzer board-odb.zip --output out --voltage-guess --voltage-gate-mode block
+
+# Reuse a previous revision's reviewed assignments (exit 5 = import rejected, 4 = conflicts)
+odb-clearance-analyzer board-odb.zip --output out --voltage-guess \
+  --import-voltage-assignments prev/net_voltage_assignments_rev_a.json
+
+# Validate the rule pack, including its behavioral self-test CSV
+odb-clearance-analyzer --validate-voltage-rule-pack
+```
+
+Machine-readable `VOLTAGE_GATE:` lines are printed to stderr for CI parsing.
+Exit-code precedence: lowest applicable non-zero code wins.
 
 Use IEC-style settings:
 
@@ -448,3 +472,93 @@ It does not replace:
 - Test-lab interpretation.
 
 The user is responsible for validating results against the actual PCB design, ODB++ export quality, manufacturing constraints, and applicable safety standards.
+
+## v0.4.15 Voltage Guessing Phase 1
+
+This package includes the first implementation phase of deterministic Voltage Guessing: a new GUI tab, built-in CSV/JSON rule pack, net-name normalization, numeric voltage parser, manual overrides, assignment JSON/CSV exports, assignment-store path in settings, and CLI flags `--voltage-guess` / `--validate-voltage-rule-pack`. No LLM or AI backend is used.
+
+
+
+## v0.4.18 Voltage Guessing Phase 3 Fixes
+
+This maintenance update fixes review findings from the v0.4.17 Phase 3 package:
+
+- Correctly classifies negative rails such as `-12V`, `-15V`, `M12V`, `N12V`, and `NEG12V`.
+- Adds built-in coverage for common battery, negative-rail, and HV polarity aliases such as `BAT+`, `BAT-`, `VBAT`, `VBATT`, `PACK+`, `PACK-`, `VEE`, `VNEG`, `HV+`, `HV-`, `BULK+`, `BULK-`, `RECT+`, and `RECT-`.
+- Prevents bulk approval of Warning- and Critical-severity voltage assignments.
+- Rejects project assignment-store files in the normal revision-import flow.
+- Validates JSON import voltages and skips non-numeric or non-finite values instead of silently converting them to unknown.
+- Validates bad numeric rule-pack fields such as invalid `priority` and `voltage_v`.
+- Updates revision delta CSV export to the required Rev C schema.
+- Fixes CLI analysis-error exit code to `1` so it no longer conflicts with voltage-gate exit code `2`.
+
+Validation command:
+
+```bash
+python -m pytest -q
+```
+
+
+## v0.4.19 Voltage Guessing Phase 4 UX
+
+Adds Phase 4 productivity and review-workflow improvements for the deterministic Voltage Guessing feature:
+
+- Batch review dry-run previews for approve / accept unknown / waive / set class-voltage.
+- Warning and Critical severity nets remain excluded from batch approve.
+- Keyboard-first Review Needed queue shortcuts: A, U, W, E, S, Enter/? for Why.
+- Inline Why? explanation for assignments, including winning rule and evidence.
+- Rule sandbox in Advanced tab for testing one net name against the active rule pack.
+- Correction-to-rule workflow: create project-local CSV rule from a manual fix.
+- Similar-net suggestion helper for applying a manual correction to related nets.
+- Persistent review-session state updates.
+- Assignment diff viewer for comparing imported assignments to the current store.
+- Copyable voltage review summary for tickets/email.
+- Geometry Viewer launch from selected voltage assignment.
+
+No LLM, local AI model, cloud API, Ollama, llama.cpp, GPT4All, OpenAI-compatible backend, or probabilistic classifier is implemented.
+
+
+## v0.4.19 Voltage Guessing Phase 4
+
+Advanced UX: batch review actions with dry-run previews, keyboard-first review
+queue (A/U/W/E/S), inline "Why?" explainability with winning/losing rules,
+correction-to-rule workflow, rule sandbox, assignment diff viewer, copyable
+review summary, persistent review sessions, first-run/resume/complete states,
+and regex voltage groups in rules.
+
+## v0.4.20 Phase 4 review fixes
+
+- Re-applied the v0.4.18 performance optimizations that the Phase 4 branch had
+  dropped (pattern/regex caches; matcher feature cache + lossless candidate
+  blocking). 20,000 nets guess in ~0.6 s; performance regression tests restored.
+- Correction-to-rule now takes effect: project-local rules are layered onto the
+  built-in pack (`load_layered_rule_pack`) and the pack cache is invalidated on
+  rule creation.
+- Geometry Viewer gained the reverse jump ("Voltage assignment" button) so
+  cross-highlighting works in both directions.
+- Keyboard shortcut legend made visible in the Review Needed tab.
+
+## v0.4.21 Crash hardening
+
+Adversarial inspection fixes: invalid regex in user rule files degrades to
+never-matching with a logged warning instead of crashing auto-detect; a net
+name with control characters gets an explicit UNKNOWN fallback instead of
+aborting the whole board; corrupt store files raise catchable errors on
+project open; tolerant normalization (`normalize_net_name_safe`) keeps
+exports, similar-net suggestions, and revision matching working on such nets.
+
+## v0.4.22 Documentation refresh
+
+Regenerated API reference from live signatures
+(`docs/voltage_guessing_api_reference_v0.4.22.md`), updated the voltage
+guessing user manual with robustness notes, added voltage CLI examples to
+this README, and introduced `CHANGELOG.md`.
+
+## v0.4.25 Voltage Guessing bulk assignment editing
+
+The All Assignments tab now supports bulk manual edits. Select multiple net rows
+with Shift/Ctrl, set the desired Class/Voltage/Review/Notes once, and click
+**Apply manual override to selected**. The edit is saved as one undoable
+`manual_bulk_edit` operation. Mixed selections show explicit placeholder values
+so the user must choose a final class/review state and either enter or clear the
+voltage before applying.

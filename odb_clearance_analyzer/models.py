@@ -192,6 +192,8 @@ class AnalysisConfig:
     metallic_particle_size_mm: float = 0.0
     export_effective_max_voltage: bool = True
     export_ipc2221a_max_voltage: bool = True
+    isolation_settings: dict[str, object] = field(default_factory=dict)
+    voltage_guessing: dict[str, object] = field(default_factory=lambda: {"assignment_store_path": "net_voltage_assignments.json"})
 
 
 

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "odb-clearance-analyzer"
-version = "0.4.13"
+version = "0.4.25"
 description = "ODB++ net-to-net copper clearance analyzer with Tkinter GUI and report export"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -39,11 +39,11 @@ odb-clearance-analyzer = "odb_clearance_analyzer.cli:main"
 odb-clearance-gui = "odb_clearance_analyzer.gui:main"
 
 [tool.setuptools]
-packages = ["odb_clearance_analyzer"]
+packages = ["odb_clearance_analyzer", "odb_clearance_analyzer.voltage_guessing"]
 
 [tool.ruff]
 line-length = 100
 target-version = "py310"
 
 [tool.setuptools.package-data]
-odb_clearance_analyzer = ["assets/app_icon.png", "assets/app_icon_small.png"]
+odb_clearance_analyzer = ["assets/app_icon.png", "assets/app_icon_small.png", "data/net_voltage_rules/*"]

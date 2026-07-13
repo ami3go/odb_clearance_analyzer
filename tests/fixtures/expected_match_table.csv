@@ -1,0 +1,30 @@
+old_net,new_net,match_status,match_score,applied,action_required,detail
+OLD_ONLY_NET,,missing,,false,,Net not present in current revision
+SIG-A,,missing,,false,,Conflict candidate awaiting resolution
+SIG.A,,missing,,false,,Conflict candidate awaiting resolution
+Vsys_Main,,missing,,false,,Suggested as likely rename
++12V,+12V,exact,,true,,
+3V3,3V3,exact,,true,,
+5V0,5V0,exact,,true,,
+ADC_IN1,ADC_IN1,exact,,true,,
+AGND,AGND,exact,,true,,
+BAT_4S,BAT_4S,exact,,true,,
+CANH,CANH,exact,,true,,
+CANL,CANL,exact,,true,,
+DC_LINK_800V,DC_LINK_800V,exact,,true,,
+GND,GND,exact,,true,,
+GPIO12,GPIO12,exact,,true,,
+HV400,HV400,exact,,true,,
+L1,L1,exact,,true,,
+M12V,M12V,exact,,true,,
+N1,N1,exact,,true,,
+,NEW_ETH_TX_N,new,,true,,No imported match; rule-based guess will apply.
+,NEW_ETH_TX_P,new,,true,,No imported match; rule-based guess will apply.
+PGND,PGND,exact,,true,,
+SENSE-DIV,SENSE_DIV,normalized,,true,,
+,SIG A,conflict,,false,resolve_conflict,"Multiple imported nets match after normalization: SIG-A, SIG.A"
+USB_VBUS,USB_VBUS,exact,,true,,
+VDD_1V8,VDD_1V8,exact,,true,,
+VREF_2V5,VREF_2V5,exact,,true,,
+Vsys_Main,VSYS_MAIN_PWR,likely_renamed,75,false,review_suggestion,
+MCU_SPI_CLK,mcu_spi_clk,case_insensitive,,true,,

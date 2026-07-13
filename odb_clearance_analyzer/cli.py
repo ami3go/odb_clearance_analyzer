@@ -8,6 +8,10 @@ from pathlib import Path
 
 from .analyzer import ClearanceAnalyzer
 from .models import AnalysisConfig
+from .voltage_guessing import export_all_voltage_files, guess_voltage_for_nets, load_rule_pack, review_service, validate_rule_pack
+from .voltage_guessing.assignment_store import assignment_store_path, create_assignment_store, save_assignment_store_atomic
+from .voltage_guessing.assignment_import import import_voltage_assignments
+from .voltage_guessing.revision_matcher import apply_safe_matches, export_revision_delta_csv, export_revision_match_csv, match_revision
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -121,6 +125,28 @@ def build_parser() -> argparse.ArgumentParser:
         default=True,
         help="Include IPC-2221A max voltage V column in exported CSV/XLSX/Markdown files. Default: true.",
     )
+    parser.add_argument(
+        "--voltage-guess",
+        action="store_true",
+        help="Run deterministic net-name voltage guessing after clearance analysis and export voltage assignment files.",
+    )
+    parser.add_argument(
+        "--import-voltage-assignments",
+        metavar="FILE",
+        default="",
+        help="Import a previous revision's voltage assignment export (.json or .csv), apply safe matches, and export revision match/delta CSVs. Exit 5 if the import is rejected, 4 if conflicts require review.",
+    )
+    parser.add_argument(
+        "--voltage-gate-mode",
+        choices=["allow", "warn", "block"],
+        default="warn",
+        help="Review gate for voltage assignments: allow, warn (stamp/report, default), or block (exit 2 while unreviewed critical items exist).",
+    )
+    parser.add_argument(
+        "--validate-voltage-rule-pack",
+        action="store_true",
+        help="Validate the built-in deterministic voltage rule pack before analysis.",
+    )
     return parser
 
 
@@ -159,6 +185,15 @@ def main(argv: list[str] | None = None) -> int:
     def progress(message: str) -> None:
         print(message, flush=True)
 
+    if args.validate_voltage_rule_pack:
+        rule_pack = load_rule_pack()
+        validation = validate_rule_pack(rule_pack)
+        if not validation.ok:
+            for issue in validation.issues:
+                print(f"RULE_PACK: {issue.level}: {issue.rule_id}: {issue.message}", file=sys.stderr)
+            return 3
+        print(f"Voltage rule pack validated: {len(rule_pack.rules)} rules")
+
     config = AnalysisConfig(
         odb_path=args.odb_path,
         output_dir=args.output,
@@ -182,7 +217,7 @@ def main(argv: list[str] | None = None) -> int:
         result = ClearanceAnalyzer(progress=progress).run(config)
     except Exception as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
-        return 2
+        return 1
 
     print("\nAnalysis summary")
     print("----------------")
@@ -199,6 +234,49 @@ def main(argv: list[str] | None = None) -> int:
     print(f"Metallic particle size mm: {result.config.metallic_particle_size_mm:g}")
     print(f"Export Effective max voltage V: {result.config.export_effective_max_voltage}")
     print(f"Export IPC-2221A max voltage V: {result.config.export_ipc2221a_max_voltage}")
+    if args.voltage_guess:
+        rule_pack = load_rule_pack()
+        assignments = guess_voltage_for_nets(sorted(result.job.named_nets), rule_pack, rule_pack.defaults, source_revision=result.job.step_name)
+        store = create_assignment_store(assignments, project_revision=result.job.step_name)
+        revision_conflicts = 0
+        if args.import_voltage_assignments:
+            from pathlib import Path as _Path
+            import sys as _sys
+            imported = import_voltage_assignments(_Path(args.import_voltage_assignments))
+            if not imported.ok:
+                print(f"VOLTAGE_IMPORT: rejected: {imported.rejected_reason}", file=_sys.stderr)
+                return 5
+            match = match_revision(imported.assignments, sorted(result.job.named_nets), rule_pack,
+                                   source_file=imported.source_file, source_revision=imported.source_revision)
+            store = create_assignment_store([], project_revision=result.job.step_name)
+            applied = apply_safe_matches(store, match, imported.assignments, rule_pack, current_revision=result.job.step_name)
+            assignments = list(store.assignments.values())
+            export_revision_match_csv(match, result.config.output_dir / "net_voltage_assignment_revision_match.csv")
+            export_revision_delta_csv(imported.assignments, store, match, result.config.output_dir / "net_voltage_assignment_revision_delta.csv")
+            revision_conflicts = match.counts.get("conflict", 0)
+            suggestions = match.counts.get("likely_renamed", 0)
+            print(f"Revision import: {applied} safe match(es) applied, {suggestions} suggestion(s) pending, {revision_conflicts} conflict(s).")
+            for line in (f"VOLTAGE_GATE: conflicts={revision_conflicts}", f"VOLTAGE_GATE: suggestions={suggestions}"):
+                print(line, file=_sys.stderr)
+        gate = review_service.review_gate_status(store if store.assignments else create_assignment_store(assignments, project_revision=result.job.step_name), args.voltage_gate_mode)
+        save_assignment_store_atomic(store if store.assignments else create_assignment_store(assignments, project_revision=result.job.step_name), assignment_store_path(result.config.output_dir))
+        files = export_all_voltage_files(assignments, result.config.output_dir, project_revision=result.job.step_name)
+        print(f"Voltage assignments exported: {len(assignments)} nets")
+        for label, path in files.items():
+            print(f"  {label}: {path}")
+        import sys as _sys
+        print(f"VOLTAGE_GATE: mode={gate.mode}", file=_sys.stderr)
+        print(f"VOLTAGE_GATE: unreviewed_critical={gate.unreviewed_critical}", file=_sys.stderr)
+        print(f"VOLTAGE_GATE: unreviewed_warning={gate.unreviewed_warning}", file=_sys.stderr)
+        print(f"VOLTAGE_GATE: needs_review={gate.needs_review}", file=_sys.stderr)
+        if gate.stamp_text:
+            print(f"VOLTAGE_GATE: {gate.stamp_text}", file=_sys.stderr)
+        if not gate.export_allowed:
+            print("VOLTAGE_GATE: export blocked (exit code 2)", file=_sys.stderr)
+            return 2
+        if args.import_voltage_assignments and revision_conflicts > 0:
+            print("VOLTAGE_GATE: revision conflicts require review (exit code 4)", file=_sys.stderr)
+            return 4
     if result.effective_air_gap_records:
         print(f"Effective Net-to-Net distance rows: {len(result.effective_air_gap_records)}")
     print("Reports:")

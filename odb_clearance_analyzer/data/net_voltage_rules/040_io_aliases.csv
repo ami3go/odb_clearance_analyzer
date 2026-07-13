@@ -1,0 +1,13 @@
+rule_id,priority,enabled,pattern,match_type,match_on,net_class,voltage_v,reference_net,voltage_type,confidence,severity,reason,warning,tags
+io_gpio_prefix,600,true,GPIO,prefix,normalized,IO_DIGITAL,,best_ground,DC,Medium,Review,GPIO prefix uses default digital IO voltage,Confirm actual IO bank voltage,io;digital
+io_gpio_token,600,true,GPIO,token,normalized,IO_DIGITAL,,best_ground,DC,Medium,Review,GPIO token uses default digital IO voltage,Confirm actual IO bank voltage,io;digital
+io_sda,700,true,SDA,token,normalized,IO_DIGITAL,,best_ground,DC,Medium,Review,I2C SDA signal,Confirm pull-up voltage,io;i2c
+io_scl,700,true,SCL,token,normalized,IO_DIGITAL,,best_ground,DC,Medium,Review,I2C SCL signal,Confirm pull-up voltage,io;i2c
+io_uart,600,true,UART,token,normalized,IO_DIGITAL,,best_ground,DC,Medium,Review,UART signal token,Confirm IO voltage,io;digital
+io_tx,500,true,TX,token,normalized,IO_DIGITAL,,best_ground,DC,Medium,Review,TX signal token,Confirm IO voltage,io;digital
+io_rx,500,true,RX,token,normalized,IO_DIGITAL,,best_ground,DC,Medium,Review,RX signal token,Confirm IO voltage,io;digital
+io_adc,700,true,ADC,token,normalized,IO_ANALOG,,best_ground,DC,Medium,Review,ADC analog input token,Confirm ADC input range,io;analog
+io_ain,700,true,AIN,token,normalized,IO_ANALOG,,best_ground,DC,Medium,Review,Analog input token,Confirm analog voltage range,io;analog
+io_dac,700,true,DAC,token,normalized,IO_ANALOG,,best_ground,DC,Medium,Review,DAC analog output token,Confirm DAC output range,io;analog
+io_sense,550,true,SENSE,token,normalized,IO_ANALOG,,best_ground,DC,Low,Warning,Sense net token found,Confirm whether this is low-voltage sense or full HV,io;analog
+io_en,450,true,EN,token,normalized,CONTROL_SIGNAL,,best_ground,DC,Medium,Review,Enable/control token,Confirm IO voltage,io;control

@@ -1,0 +1,10 @@
+rule_id,priority,enabled,pattern,match_type,match_on,net_class,voltage_v,reference_net,voltage_type,confidence,severity,reason,warning,tags
+mains_l,1000,true,L,exact,normalized,MAINS,230,,AC_RMS,Medium,Critical,Single-letter mains live alias,Confirm mains voltage manually,mains
+mains_n,1000,true,N,exact,normalized,MAINS,230,,AC_RMS,Medium,Critical,Single-letter mains neutral alias,Confirm mains voltage manually,mains
+mains_l1,1000,true,L1,exact,normalized,MAINS,230,,AC_RMS,Medium,Critical,Mains phase alias,Confirm mains voltage manually,mains
+mains_n1,1000,true,N1,exact,normalized,MAINS,230,,AC_RMS,Medium,Critical,Mains neutral alias,Confirm mains voltage manually,mains
+mains_line,900,true,LINE,token,normalized,MAINS,230,,AC_RMS,Medium,Critical,Mains line token,Confirm mains voltage manually,mains
+mains_neutral,900,true,NEUTRAL,token,normalized,MAINS,230,,AC_RMS,Medium,Critical,Mains neutral token,Confirm mains voltage manually,mains
+mains_ac_l,950,true,AC_L,exact,normalized,MAINS,230,,AC_RMS,Medium,Critical,Mains AC_L alias,Confirm mains voltage manually,mains
+mains_ac_n,950,true,AC_N,exact,normalized,MAINS,230,,AC_RMS,Medium,Critical,Mains AC_N alias,Confirm mains voltage manually,mains
+mains_live,900,true,LIVE,token,normalized,MAINS,230,,AC_RMS,Medium,Critical,Mains live token,Confirm mains voltage manually,mains

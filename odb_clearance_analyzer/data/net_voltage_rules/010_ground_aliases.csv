@@ -1,0 +1,11 @@
+rule_id,priority,enabled,pattern,match_type,match_on,net_class,voltage_v,reference_net,voltage_type,confidence,severity,reason,warning,tags
+gnd_exact_gnd,1000,true,GND,exact,normalized,GND,0,,DC,High,Info,Known ground alias,,ground
+gnd_exact_dgnd,1000,true,DGND,exact,normalized,GND,0,,DC,High,Info,Known digital ground alias,,ground
+gnd_exact_agnd,1000,true,AGND,exact,normalized,GND,0,,DC,High,Info,Known analog ground alias,,ground
+gnd_exact_pgnd,1000,true,PGND,exact,normalized,GND,0,,DC,High,Info,Known power ground alias,,ground
+gnd_exact_earth,1000,true,EARTH,exact,normalized,GND,0,,DC,High,Info,Known earth/chassis alias,,ground
+gnd_exact_pe,1000,true,PE,exact,normalized,GND,0,,DC,High,Info,Known protective earth alias,,ground
+gnd_exact_fg,1000,true,FG,exact,normalized,GND,0,,DC,High,Info,Known frame ground alias,,ground
+gnd_exact_0v,1000,true,0V,exact,normalized,GND,0,,DC,High,Info,Known 0V alias,,ground
+gnd_token_gnd,700,true,GND,token,normalized,GND,0,,DC,High,Info,Ground token found,,ground
+gnd_token_vss,700,true,VSS,token,normalized,GND,0,,DC,High,Info,VSS token found,,ground

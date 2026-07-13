@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "pack_name": "builtin_default",
+  "pack_version": "1.0.0",
+  "description": "Built-in deterministic net-name rules for ODB++ Clearance Analyzer",
+  "files": [
+    "010_ground_aliases.csv",
+    "020_power_rails.csv",
+    "030_mains_aliases.csv",
+    "040_io_aliases.csv",
+    "050_comm_aliases.csv",
+    "100_regex_rules.json"
+  ],
+  "test_file": "net_voltage_rule_tests.csv"
+}

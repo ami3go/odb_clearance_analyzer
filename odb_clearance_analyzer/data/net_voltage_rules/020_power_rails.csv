@@ -1,0 +1,27 @@
+rule_id,priority,enabled,pattern,match_type,match_on,net_class,voltage_v,reference_net,voltage_type,confidence,severity,reason,warning,tags
+power_1v8,1000,true,1V8,exact,normalized,POWER,1.8,best_ground,DC,High,Info,Known 1.8 V rail,,power
+power_2v5,1000,true,2V5,exact,normalized,POWER,2.5,best_ground,DC,High,Info,Known 2.5 V rail,,power
+power_3v3,1000,true,3V3,exact,normalized,POWER,3.3,best_ground,DC,High,Info,Known 3.3 V rail,,power
+power_5v,1000,true,5V,exact,normalized,POWER,5,best_ground,DC,High,Info,Known 5 V rail,,power
+power_12v,1000,true,12V,exact,normalized,POWER,12,best_ground,DC,High,Review,Known 12 V rail,,power
+power_24v,1000,true,24V,exact,normalized,POWER,24,best_ground,DC,High,Warning,Known 24 V rail,Review 24 V industrial power rail,power
+usb_vbus,980,true,USB_VBUS,exact,normalized,POWER,5,best_ground,DC,High,Review,Known USB VBUS rail,,usb;power
+usb_vbus_token,800,true,VBUS,token,normalized,POWER,5,best_ground,DC,High,Review,VBUS token defaults to 5 V,Confirm if USB-PD is used,usb;power
+usb_pd_vbus,990,true,VBUS_PD,exact,normalized,POWER_VARIABLE,20,best_ground,DC,Medium,Warning,USB-PD VBUS defaults to configured max voltage,Confirm actual USB-PD design limit,usb;pd;power
+poe_vin,950,true,POE,token,normalized,POWER_HIGHER_LOW_VOLTAGE,57,best_ground,DC,Medium,Warning,PoE net defaults to 57 V,Confirm actual PoE design limit,poe;power
+vref_token,850,true,VREF,token,normalized,REFERENCE,,best_ground,DC,Medium,Review,Voltage reference token found,Confirm reference voltage,reference
+battery_bat_exact,930,true,BAT,exact,normalized,BATTERY,,best_ground,DC,Medium,Warning,Battery net alias found,Battery voltage must be manually confirmed,battery;power
+battery_bat_plus_exact,930,true,BAT+,exact,normalized,BATTERY,,best_ground,DC,Medium,Warning,Battery positive net alias found,Battery voltage must be manually confirmed,battery;power
+battery_bat_minus_exact,930,true,BAT_,exact,normalized,BATTERY,,best_ground,DC,Medium,Warning,Battery negative net alias found,Battery voltage must be manually confirmed,battery;power
+battery_vbat_exact,930,true,VBAT,exact,normalized,BATTERY,,best_ground,DC,Medium,Warning,VBAT battery net alias found,Battery voltage must be manually confirmed,battery;power
+battery_vbatt_exact,930,true,VBATT,exact,normalized,BATTERY,,best_ground,DC,Medium,Warning,VBATT battery net alias found,Battery voltage must be manually confirmed,battery;power
+battery_pack_plus_exact,930,true,PACK+,exact,normalized,BATTERY,,best_ground,DC,Medium,Warning,Battery pack positive alias found,Battery voltage must be manually confirmed,battery;power
+battery_pack_minus_exact,930,true,PACK_,exact,normalized,BATTERY,,best_ground,DC,Medium,Warning,Battery pack negative alias found,Battery voltage must be manually confirmed,battery;power
+negative_vee_exact,930,true,VEE,exact,normalized,POWER_NEGATIVE,,GND,DC,Medium,Review,Negative rail alias VEE found,Confirm negative rail voltage,power;negative
+negative_vneg_exact,930,true,VNEG,exact,normalized,POWER_NEGATIVE,,GND,DC,Medium,Review,Negative rail alias VNEG found,Confirm negative rail voltage,power;negative
+hv_plus_exact,940,true,HV+,exact,normalized,HIGH_VOLTAGE,,best_ground,DC,Medium,Critical,High-voltage positive alias found,High-voltage net requires manual voltage confirmation,hv;power
+hv_minus_exact,940,true,HV_,exact,normalized,HIGH_VOLTAGE,,best_ground,DC,Medium,Critical,High-voltage negative alias found,High-voltage net requires manual voltage confirmation,hv;power
+bulk_plus_exact,940,true,BULK+,exact,normalized,HIGH_VOLTAGE,,best_ground,DC,Medium,Critical,Bulk capacitor positive high-voltage alias found,High-voltage net requires manual voltage confirmation,hv;power
+bulk_minus_exact,940,true,BULK_,exact,normalized,HIGH_VOLTAGE,,best_ground,DC,Medium,Critical,Bulk capacitor negative high-voltage alias found,High-voltage net requires manual voltage confirmation,hv;power
+rect_plus_exact,940,true,RECT+,exact,normalized,HIGH_VOLTAGE,,best_ground,DC,Medium,Critical,Rectified high-voltage positive alias found,High-voltage net requires manual voltage confirmation,hv;power
+rect_minus_exact,940,true,RECT_,exact,normalized,HIGH_VOLTAGE,,best_ground,DC,Medium,Critical,Rectified high-voltage negative alias found,High-voltage net requires manual voltage confirmation,hv;power

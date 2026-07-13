@@ -22,7 +22,7 @@ from .settings_profile import DEFAULT_SETTINGS_FILENAME, analysis_config_to_prof
 from .voltage_estimator import material_group_from_cti, voltage_settings_summary, ipc2221a_settings_text
 
 
-REPORT_SETTINGS_APP_VERSION = "0.4.13"
+REPORT_SETTINGS_APP_VERSION = "0.4.19"
 
 
 class ReportWriter:

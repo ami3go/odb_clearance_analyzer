@@ -91,12 +91,14 @@ class GeometryViewer(Toplevel):
         point_a: tuple[float, float] | None = None,
         point_b: tuple[float, float] | None = None,
         dark_theme: bool = False,
+        on_show_voltage_assignment=None,
     ) -> None:
         super().__init__(master)
         self.dark_theme = dark_theme
         install_material_theme(self, dark=dark_theme)
         self.configure(bg=MATERIAL_COLORS["app_bg"])
         self.result = result
+        self.on_show_voltage_assignment = on_show_voltage_assignment
         self._window_icon = _load_packaged_photoimage("app_icon.png", master=self)
         self._header_icon = _load_packaged_photoimage("app_icon_small.png", master=self)
         self.title("ODB++ Geometry Viewer")
@@ -205,6 +207,10 @@ class GeometryViewer(Toplevel):
         self.net_b_combo = ttk.Combobox(top, textvariable=self.net_b_var, values=[], width=28)
         self.net_b_combo.grid(row=1, column=7, sticky="ew", pady=3)
         self.net_b_combo.bind("<<ComboboxSelected>>", lambda _event: self._on_net_combo_selected())
+        if self.on_show_voltage_assignment is not None:
+            ttk.Button(top, text="Voltage assignment", command=self._jump_to_voltage_assignment).grid(
+                row=1, column=8, sticky="w", padx=(12, 0), pady=3
+            )
 
         self.net_a_filter_var.trace_add("write", lambda *_args: self._refresh_net_combo_values())
         self.net_b_filter_var.trace_add("write", lambda *_args: self._refresh_net_combo_values())
@@ -1543,3 +1549,13 @@ class GeometryViewerLauncherMixin:
             return self.debug_records[int(selection[0])]
         except Exception:
             return None
+
+    def _jump_to_voltage_assignment(self) -> None:
+        """Phase 4 gate 11: jump from a net in the viewer to its voltage assignment."""
+        if self.on_show_voltage_assignment is None:
+            return
+        net = (self.net_a_var.get() or self.net_b_var.get() or "").strip()
+        if not net:
+            messagebox.showinfo("Voltage assignment", "Select Net A (or Net B) first.", parent=self)
+            return
+        self.on_show_voltage_assignment(net)

@@ -1,0 +1,8 @@
+rule_id,priority,enabled,pattern,match_type,match_on,net_class,voltage_v,reference_net,voltage_type,confidence,severity,reason,warning,tags
+comm_canh,850,true,CANH,exact,normalized,COMMUNICATION,,best_ground,DC,Medium,Review,CAN high communication net,Confirm transceiver/common-mode voltage,communication;can
+comm_canl,850,true,CANL,exact,normalized,COMMUNICATION,,best_ground,DC,Medium,Review,CAN low communication net,Confirm transceiver/common-mode voltage,communication;can
+comm_usb_dp,850,true,USB_DP,exact,normalized,DIFFERENTIAL_IO,,best_ground,DC,Medium,Review,USB differential signal,Confirm signaling voltage,communication;usb
+comm_usb_dm,850,true,USB_DM,exact,normalized,DIFFERENTIAL_IO,,best_ground,DC,Medium,Review,USB differential signal,Confirm signaling voltage,communication;usb
+iso_token,650,true,ISO,token,normalized,ISOLATION_DOMAIN_HINT,,best_ground,UNKNOWN,Medium,Warning,Isolation-domain token found,Confirm isolated-side voltage/domain,isolation
+sec_token,650,true,SEC,token,normalized,ISOLATION_DOMAIN_HINT,,best_ground,UNKNOWN,Medium,Warning,Secondary-side token found,Confirm isolated-side voltage/domain,isolation
+pri_token,650,true,PRI,token,normalized,ISOLATION_DOMAIN_HINT,,best_ground,UNKNOWN,Medium,Warning,Primary-side token found,Confirm primary-side voltage/domain,isolation
