@@ -1520,6 +1520,15 @@ class GeometryViewer(Toplevel):
         else:
             nice = 10
         return nice * (10 ** exp)
+    def _jump_to_voltage_assignment(self) -> None:
+        """Jump from the viewer to the selected net's voltage assignment row."""
+        if self.on_show_voltage_assignment is None:
+            return
+        net = (self.net_a_var.get() or self.net_b_var.get() or "").strip()
+        if not net:
+            messagebox.showinfo("Voltage assignment", "Select Net A (or Net B) first.", parent=self)
+            return
+        self.on_show_voltage_assignment(net)
 
 
 class GeometryViewerLauncherMixin:
@@ -1549,13 +1558,3 @@ class GeometryViewerLauncherMixin:
             return self.debug_records[int(selection[0])]
         except Exception:
             return None
-
-    def _jump_to_voltage_assignment(self) -> None:
-        """Phase 4 gate 11: jump from a net in the viewer to its voltage assignment."""
-        if self.on_show_voltage_assignment is None:
-            return
-        net = (self.net_a_var.get() or self.net_b_var.get() or "").strip()
-        if not net:
-            messagebox.showinfo("Voltage assignment", "Select Net A (or Net B) first.", parent=self)
-            return
-        self.on_show_voltage_assignment(net)

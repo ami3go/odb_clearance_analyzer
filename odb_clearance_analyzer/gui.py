@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 import queue
 import re
@@ -38,12 +39,26 @@ from .voltage_guessing.revision_matcher import (
 from .voltage_guessing.assignment_store import assignment_store_path, create_assignment_store, load_assignment_store, save_assignment_store_atomic, utc_now
 from .voltage_guessing.models import AssignmentStore
 from .voltage_guessing.enums import NET_CLASSES, REVIEW_STATES
-from .voltage_guessing.models import VoltageAssignment, VoltageEvidence
+from .voltage_guessing.models import VoltageAssignment, VoltageDefaults, VoltageEvidence
+from .voltage_guessing.galvanic_zones import (
+    DEFAULT_GALVANIC_ZONE_VOLTAGE_V,
+    GALVANIC_ZONE_1,
+    GALVANIC_ZONE_2,
+    GALVANIC_ZONE_REPORT_CSV,
+    export_galvanic_zone_spacing_csv,
+    normalize_galvanic_zone,
+)
+from .voltage_guessing.requirements import (
+    VoltageRequirementResolver,
+    resolve_voltage_standard_compliance,
+    summarize_voltage_requirements_for_measurements,
+)
 
 
 _MIXED_VOLTAGE_SELECTION = "<mixed - choose value>"
 _MIXED_CLASS_SELECTION = "<mixed - choose class>"
 _MIXED_REVIEW_SELECTION = "<mixed - choose review state>"
+_MIXED_ZONE_SELECTION = "<mixed - choose zone>"
 
 
 
@@ -196,6 +211,9 @@ class ClearanceGui(ttk.Frame):
         self.voltage_final_voltage = StringVar(value="")
         self.voltage_review_state = StringVar(value="Needs review")
         self.voltage_notes = StringVar(value="")
+        self.voltage_max_cell_voltage = DoubleVar(value=4.3)
+        self.voltage_galvanic_zone_voltage = DoubleVar(value=DEFAULT_GALVANIC_ZONE_VOLTAGE_V)
+        self.voltage_galvanic_zone = StringVar(value="")
         self.voltage_sandbox_net = StringVar(value="")
         self.voltage_sandbox_result = StringVar(value="Rule sandbox: enter a test net name and evaluate.")
         self.voltage_diff_tree: ttk.Treeview | None = None
@@ -618,10 +636,41 @@ class ClearanceGui(ttk.Frame):
         workflow.pack(fill=X, pady=(0, 8))
         ttk.Label(workflow, text="[1 Load nets] → [2 Guess] → [3 Review/edit] → [4 Export]", style="CardTitle.TLabel").pack(anchor="w")
         ttk.Label(workflow, textvariable=self.voltage_counts_text, style="CardSubtitle.TLabel").pack(anchor="w", pady=(6, 0))
+        cell_row = ttk.Frame(workflow, style="Card.TFrame")
+        cell_row.pack(anchor="w", fill=X, pady=(10, 0))
+        ttk.Label(cell_row, text="Max cell voltage, V").pack(side=LEFT, padx=(0, 6))
+        ttk.Entry(cell_row, textvariable=self.voltage_max_cell_voltage, width=8).pack(side=LEFT, padx=(0, 10), ipady=2)
+        ttk.Label(
+            cell_row,
+            text="Used by BAT_4S and Cell<number> rules. Example: Cell3 = 3 × Max cell voltage.",
+            style="Muted.TLabel",
+        ).pack(side=LEFT)
+        zone_row = ttk.Frame(workflow, style="Card.TFrame")
+        zone_row.pack(anchor="w", fill=X, pady=(8, 0))
+        ttk.Label(zone_row, text="Zone 1 ↔ Zone 2 working voltage, V").pack(side=LEFT, padx=(0, 6))
+        ttk.Entry(zone_row, textvariable=self.voltage_galvanic_zone_voltage, width=8).pack(side=LEFT, padx=(0, 6), ipady=2)
+        ttk.Button(zone_row, text="Apply zone-to-zone voltage", command=self._apply_zone_to_zone_voltage_setting).pack(side=LEFT, padx=(0, 10))
+        ttk.Label(
+            zone_row,
+            text="Higher-priority screening voltage for pairs that cross Zone 1 ↔ Zone 2; default 1000 V.",
+            style="Muted.TLabel",
+        ).pack(side=LEFT)
+        hierarchy_note = ttk.Label(
+            workflow,
+            text=(
+                "Voltage requirement hierarchy: different galvanic zones → Zone 1 ↔ Zone 2 working voltage; "
+                "same zone → local net/manual/class voltage; missing zone → local voltage with review warning."
+            ),
+            style="Muted.TLabel",
+            wraplength=1050,
+        )
+        hierarchy_note.pack(anchor="w", fill=X, pady=(8, 0))
+
         button_row = ttk.Frame(workflow, style="Card.TFrame")
         button_row.pack(anchor="w", pady=(10, 0))
         ttk.Button(button_row, text="Auto-detect voltage classes", style="Primary.TButton", command=self._run_voltage_auto_detect).pack(side=LEFT, padx=(0, 8))
         ttk.Button(button_row, text="Export assignments", command=self._export_voltage_assignments).pack(side=LEFT, padx=(0, 8))
+        ttk.Button(button_row, text="Export zone report", command=self._export_galvanic_zone_report_dialog).pack(side=LEFT, padx=(0, 8))
         ttk.Button(button_row, text="Copy summary", command=self._copy_voltage_review_summary).pack(side=LEFT, padx=(0, 8))
         ttk.Button(button_row, text="Open output folder", command=self._open_output_folder).pack(side=LEFT, padx=(0, 8))
         ttk.Button(button_row, text="Undo last action", command=self._voltage_undo_last).pack(side=LEFT, padx=(0, 8))
@@ -641,8 +690,9 @@ class ClearanceGui(ttk.Frame):
         self._create_voltage_assignments_view(assignments_tab)
         self._create_voltage_revision_import_view(revision_tab)
         ttk.Button(export_tab, text="Export voltage assignment files now", style="Primary.TButton", command=self._export_voltage_assignments).pack(anchor="w")
+        ttk.Button(export_tab, text="Export galvanic zone report", command=self._export_galvanic_zone_report_dialog).pack(anchor="w", pady=(8, 0))
         ttk.Button(export_tab, text="Copy review summary", command=self._copy_voltage_review_summary).pack(anchor="w", pady=(8, 0))
-        ttk.Label(export_tab, text="Generated files: net_voltage_guessing.csv, net_voltage_assignments.json, net_voltage_assignments.csv", style="Muted.TLabel", wraplength=1000).pack(anchor="w", pady=(8, 0))
+        ttk.Label(export_tab, text="Generated files: net_voltage_guessing.csv, net_voltage_assignments.json, net_voltage_assignments.csv, and galvanic_zone_spacing.csv when Zone 1/Zone 2 assignments exist.", style="Muted.TLabel", wraplength=1000).pack(anchor="w", pady=(8, 0))
         self._create_voltage_advanced_phase4_view(advanced_tab)
 
     def _create_voltage_review_queue_view(self, parent) -> None:
@@ -851,7 +901,7 @@ class ClearanceGui(ttk.Frame):
         table_frame.grid(row=0, column=0, sticky="nsew", padx=(0, 8))
         table_frame.rowconfigure(0, weight=1)
         table_frame.columnconfigure(0, weight=1)
-        columns = ("net", "class", "voltage", "confidence", "severity", "source", "review_state", "rule", "warning")
+        columns = ("net", "zone", "class", "voltage", "confidence", "severity", "source", "review_state", "rule", "warning")
         tree = ttk.Treeview(table_frame, columns=columns, show="headings", selectmode="extended", style="Modern.Treeview")
         yscroll = ttk.Scrollbar(table_frame, orient="vertical", command=tree.yview)
         xscroll = ttk.Scrollbar(table_frame, orient="horizontal", command=tree.xview)
@@ -861,6 +911,7 @@ class ClearanceGui(ttk.Frame):
         xscroll.grid(row=1, column=0, sticky="ew")
         headings = {
             "net": "Net name",
+            "zone": "Galvanic zone",
             "class": "Final class",
             "voltage": "Final voltage V",
             "confidence": "Confidence",
@@ -870,7 +921,7 @@ class ClearanceGui(ttk.Frame):
             "rule": "Matched rule",
             "warning": "Warning",
         }
-        widths = {"net": 220, "class": 160, "voltage": 110, "confidence": 90, "severity": 90, "source": 90, "review_state": 130, "rule": 180, "warning": 280}
+        widths = {"net": 220, "zone": 120, "class": 160, "voltage": 110, "confidence": 90, "severity": 90, "source": 90, "review_state": 130, "rule": 180, "warning": 280}
         for col in columns:
             tree.heading(col, text=headings[col])
             tree.column(col, width=widths[col], anchor="w")
@@ -892,24 +943,128 @@ class ClearanceGui(ttk.Frame):
         detail.columnconfigure(1, weight=1)
         ttk.Label(detail, text="Net").grid(row=0, column=0, sticky="w", pady=4)
         ttk.Label(detail, textvariable=self.voltage_selected_net, style="CardSubtitle.TLabel", wraplength=260).grid(row=0, column=1, sticky="ew", pady=4)
-        ttk.Label(detail, text="Class").grid(row=1, column=0, sticky="w", pady=4)
-        ttk.Combobox(detail, textvariable=self.voltage_final_class, values=[_MIXED_CLASS_SELECTION, *sorted(NET_CLASSES)], state="readonly", width=24).grid(row=1, column=1, sticky="ew", pady=4)
-        ttk.Label(detail, text="Voltage V").grid(row=2, column=0, sticky="w", pady=4)
-        ttk.Entry(detail, textvariable=self.voltage_final_voltage).grid(row=2, column=1, sticky="ew", pady=4)
-        ttk.Label(detail, text="Review state").grid(row=3, column=0, sticky="w", pady=4)
-        ttk.Combobox(detail, textvariable=self.voltage_review_state, values=[_MIXED_REVIEW_SELECTION, *sorted(REVIEW_STATES)], state="readonly", width=24).grid(row=3, column=1, sticky="ew", pady=4)
-        ttk.Label(detail, text="Notes").grid(row=4, column=0, sticky="w", pady=4)
-        ttk.Entry(detail, textvariable=self.voltage_notes).grid(row=4, column=1, sticky="ew", pady=4)
-        ttk.Label(detail, text="Tip: use Shift/Ctrl to select multiple rows. Apply writes this Class/Voltage/Review/Notes to every selected net.", style="Muted.TLabel", wraplength=320).grid(row=5, column=0, columnspan=2, sticky="ew", pady=(10, 4))
-        ttk.Button(detail, text="Apply manual override to selected", style="Primary.TButton", command=self._apply_voltage_manual_override).grid(row=6, column=0, columnspan=2, sticky="ew", pady=4)
-        ttk.Button(detail, text="Learn from my fix", command=self._voltage_learn_from_fix).grid(row=7, column=0, columnspan=2, sticky="ew", pady=4)
-        ttk.Button(detail, text="Why?", command=self._show_voltage_why).grid(row=8, column=0, columnspan=2, sticky="ew", pady=4)
-        ttk.Button(detail, text="Show on board", command=self._show_voltage_net_on_board).grid(row=9, column=0, columnspan=2, sticky="ew", pady=4)
-        ttk.Button(detail, text="Export now", command=self._export_voltage_assignments).grid(row=10, column=0, columnspan=2, sticky="ew", pady=4)
+        ttk.Label(detail, text="Galvanic zone").grid(row=1, column=0, sticky="w", pady=4)
+        ttk.Combobox(detail, textvariable=self.voltage_galvanic_zone, values=[_MIXED_ZONE_SELECTION, "", GALVANIC_ZONE_1, GALVANIC_ZONE_2], state="readonly", width=24).grid(row=1, column=1, sticky="ew", pady=4)
+        ttk.Label(detail, text="Class").grid(row=2, column=0, sticky="w", pady=4)
+        ttk.Combobox(detail, textvariable=self.voltage_final_class, values=[_MIXED_CLASS_SELECTION, *sorted(NET_CLASSES)], state="readonly", width=24).grid(row=2, column=1, sticky="ew", pady=4)
+        ttk.Label(detail, text="Voltage V").grid(row=3, column=0, sticky="w", pady=4)
+        ttk.Entry(detail, textvariable=self.voltage_final_voltage).grid(row=3, column=1, sticky="ew", pady=4)
+        ttk.Label(detail, text="Review state").grid(row=4, column=0, sticky="w", pady=4)
+        ttk.Combobox(detail, textvariable=self.voltage_review_state, values=[_MIXED_REVIEW_SELECTION, *sorted(REVIEW_STATES)], state="readonly", width=24).grid(row=4, column=1, sticky="ew", pady=4)
+        ttk.Label(detail, text="Notes").grid(row=5, column=0, sticky="w", pady=4)
+        ttk.Entry(detail, textvariable=self.voltage_notes).grid(row=5, column=1, sticky="ew", pady=4)
+        ttk.Label(detail, text="Tip: use Shift/Ctrl to select multiple rows. Zone-only actions preserve Class/Voltage/Review/Notes.", style="Muted.TLabel", wraplength=320).grid(row=6, column=0, columnspan=2, sticky="ew", pady=(10, 4))
+        ttk.Button(detail, text="Apply manual voltage override to selected", style="Primary.TButton", command=self._apply_voltage_manual_override).grid(row=7, column=0, columnspan=2, sticky="ew", pady=4)
+        ttk.Button(detail, text="Apply galvanic zone only to selected", command=self._apply_voltage_galvanic_zone_only).grid(row=8, column=0, columnspan=2, sticky="ew", pady=4)
+        ttk.Button(detail, text="Clear galvanic zone from selected", command=lambda: self._apply_voltage_galvanic_zone_only(clear=True)).grid(row=9, column=0, columnspan=2, sticky="ew", pady=4)
+        ttk.Button(detail, text="Learn from my fix", command=self._voltage_learn_from_fix).grid(row=10, column=0, columnspan=2, sticky="ew", pady=4)
+        ttk.Button(detail, text="Why?", command=self._show_voltage_why).grid(row=11, column=0, columnspan=2, sticky="ew", pady=4)
+        ttk.Button(detail, text="Show on board", command=self._show_voltage_net_on_board).grid(row=12, column=0, columnspan=2, sticky="ew", pady=4)
+        ttk.Button(detail, text="Export now", command=self._export_voltage_assignments).grid(row=13, column=0, columnspan=2, sticky="ew", pady=4)
+        ttk.Label(detail, text="Zone-to-zone voltage V").grid(row=14, column=0, sticky="w", pady=(16, 4))
+        ttk.Entry(detail, textvariable=self.voltage_galvanic_zone_voltage).grid(row=14, column=1, sticky="ew", pady=(16, 4))
+        ttk.Button(detail, text="Apply zone-to-zone voltage setting", command=self._apply_zone_to_zone_voltage_setting).grid(row=15, column=0, columnspan=2, sticky="ew", pady=4)
+        ttk.Label(detail, text="Used for every Zone 1 ↔ Zone 2 pair. Same-zone pairs still use the net-to-net voltage difference.", style="Muted.TLabel", wraplength=320).grid(row=16, column=0, columnspan=2, sticky="ew", pady=(4, 0))
 
     @property
     def voltage_assignments(self) -> dict[str, VoltageAssignment]:
         return self.voltage_store.assignments
+
+    def _validated_max_cell_voltage(self, *, show_error: bool = False) -> float | None:
+        """Return the GUI max-cell-voltage setting, or None when invalid."""
+
+        try:
+            value = float(self.voltage_max_cell_voltage.get())
+        except Exception:
+            value = float("nan")
+        if not math.isfinite(value) or value <= 0:
+            if show_error:
+                messagebox.showerror("Voltage Guessing", "Max cell voltage must be a positive finite number, for example 4.3.")
+            return None
+        return value
+
+    def _safe_max_cell_voltage(self) -> float:
+        return self._validated_max_cell_voltage(show_error=False) or 4.3
+
+    def _validated_galvanic_zone_voltage(self, *, show_error: bool = False) -> float | None:
+        """Return the GUI Zone 1 ↔ Zone 2 voltage, or None when invalid."""
+
+        try:
+            value = float(self.voltage_galvanic_zone_voltage.get())
+        except Exception:
+            value = float("nan")
+        if not math.isfinite(value) or value <= 0:
+            if show_error:
+                messagebox.showerror("Voltage Guessing", "Zone 1 ↔ Zone 2 voltage must be a positive finite number, for example 1000.")
+            return None
+        return value
+
+    def _safe_galvanic_zone_voltage(self) -> float:
+        return self._validated_galvanic_zone_voltage(show_error=False) or DEFAULT_GALVANIC_ZONE_VOLTAGE_V
+
+    def _apply_zone_to_zone_voltage_setting(self) -> None:
+        """Validate and persist the user-selected Zone 1 ↔ Zone 2 voltage."""
+
+        value = self._validated_galvanic_zone_voltage(show_error=True)
+        if value is None:
+            return
+        self._sync_voltage_settings_to_store()
+        self._save_voltage_settings_safely()
+        self._refresh_voltage_overview()
+        self._append_log(f"Voltage Guessing: Zone 1 ↔ Zone 2 voltage set to {value:g} V.")
+        messagebox.showinfo(
+            "Voltage Guessing",
+            f"Zone 1 ↔ Zone 2 voltage set to {value:g} V.\n\n"
+            "Cross-zone pairs will use this value as the higher-priority required voltage. "
+            "Same-zone pairs still use the net-to-net voltage difference.",
+        )
+
+    def _current_voltage_guessing_settings(self) -> dict[str, object]:
+        zone_voltage = self._safe_galvanic_zone_voltage()
+        return {
+            "assignment_store_path": "net_voltage_assignments.json",
+            "max_cell_voltage_v": self._safe_max_cell_voltage(),
+            "galvanic_zone_voltage_v": zone_voltage,
+            "zone_to_zone_voltage_v": zone_voltage,
+            "galvanic_zones_supported": [GALVANIC_ZONE_1, GALVANIC_ZONE_2],
+        }
+
+    def _sync_voltage_settings_to_store(self) -> None:
+        if not hasattr(self.voltage_store, "settings") or self.voltage_store.settings is None:
+            self.voltage_store.settings = {}
+        self.voltage_store.settings.update(self._current_voltage_guessing_settings())
+
+    def _apply_voltage_guessing_settings(self, settings: dict[str, object] | None, *, source: str = "settings") -> None:
+        settings = dict(settings or {})
+        raw = settings.get("max_cell_voltage_v", settings.get("battery_volts_per_cell_max", None))
+        if raw is not None:
+            try:
+                value = float(raw)
+            except Exception:
+                self._append_log(f"Voltage Guessing: ignored invalid max_cell_voltage_v from {source}: {raw!r}")
+            else:
+                if math.isfinite(value) and value > 0:
+                    self.voltage_max_cell_voltage.set(value)
+                else:
+                    self._append_log(f"Voltage Guessing: ignored invalid max_cell_voltage_v from {source}: {raw!r}")
+        zone_raw = settings.get("galvanic_zone_voltage_v", settings.get("zone_to_zone_voltage_v", None))
+        if zone_raw is not None:
+            try:
+                zone_value = float(zone_raw)
+            except Exception:
+                self._append_log(f"Voltage Guessing: ignored invalid galvanic_zone_voltage_v from {source}: {zone_raw!r}")
+            else:
+                if math.isfinite(zone_value) and zone_value > 0:
+                    self.voltage_galvanic_zone_voltage.set(zone_value)
+                else:
+                    self._append_log(f"Voltage Guessing: ignored invalid galvanic_zone_voltage_v from {source}: {zone_raw!r}")
+
+    def _current_voltage_defaults(self, rule_pack=None, *, show_error: bool = False) -> VoltageDefaults | None:
+        value = self._validated_max_cell_voltage(show_error=show_error)
+        if value is None:
+            return None
+        pack = rule_pack or self._current_voltage_rule_pack()
+        return replace(pack.defaults, battery_volts_per_cell_max=value)
 
     def _current_voltage_rule_pack(self):
         """Built-in pack layered with project-local correction rules.
@@ -954,9 +1109,13 @@ class ClearanceGui(ttk.Frame):
             if not messagebox.askyesno("Auto-detect dry-run preview", preview):
                 return
         rule_pack = self._current_voltage_rule_pack()
+        defaults = self._current_voltage_defaults(rule_pack, show_error=True)
+        if defaults is None:
+            return
         changed = review_service.run_auto_detect(
-            self.voltage_store, nets, rule_pack, source_revision=self._voltage_project_revision()
+            self.voltage_store, nets, rule_pack, source_revision=self._voltage_project_revision(), defaults=defaults
         )
+        self._sync_voltage_settings_to_store()
         self._save_voltage_store_safely()
         self._refresh_voltage_views()
         self._append_log(
@@ -986,6 +1145,7 @@ class ClearanceGui(ttk.Frame):
                 iid=assignment.net_name,
                 values=(
                     assignment.net_name,
+                    normalize_galvanic_zone(getattr(assignment, "galvanic_zone", "")),
                     assignment.final_class,
                     "" if assignment.final_voltage_v is None else f"{assignment.final_voltage_v:g}",
                     assignment.confidence,
@@ -1003,9 +1163,11 @@ class ClearanceGui(ttk.Frame):
         total_assignments = len(self.voltage_assignments)
         unknown = sum(1 for a in self.voltage_assignments.values() if a.final_class == "UNKNOWN")
         manual = sum(1 for a in self.voltage_assignments.values() if a.source == "manual")
+        zone1 = sum(1 for a in self.voltage_assignments.values() if normalize_galvanic_zone(getattr(a, "galvanic_zone", "")) == GALVANIC_ZONE_1)
+        zone2 = sum(1 for a in self.voltage_assignments.values() if normalize_galvanic_zone(getattr(a, "galvanic_zone", "")) == GALVANIC_ZONE_2)
         gate = review_service.review_gate_status(self.voltage_store, self.voltage_gate_mode.get())
         self.voltage_counts_text.set(
-            f"Total nets: {total_nets} | Assigned: {total_assignments} | Unknown: {unknown} | Manual overrides: {manual} | {gate.counts_line}"
+            f"Total nets: {total_nets} | Assigned: {total_assignments} | Unknown: {unknown} | Manual overrides: {manual} | Zone 1: {zone1} | Zone 2: {zone2} | {gate.counts_line}"
         )
         if gate.stamp_text:
             self.voltage_gate_text.set(f"Gate ({gate.mode}): {gate.stamp_text}" + ("" if gate.export_allowed else " — EXPORT BLOCKED"))
@@ -1019,7 +1181,9 @@ class ClearanceGui(ttk.Frame):
         else:
             state = f"Resume review: {queue_count} item(s) still need attention. Queue position: {self.voltage_store.review_session.queue_position}."
         self.voltage_status_text.set(
-            state + " Phase 4 UX active: batch previews, keyboard review, Why?, rule sandbox, correction-to-rule, diff viewer, copy summary."
+            state
+            + f" Max cell voltage: {self._safe_max_cell_voltage():g} V/cell; Zone 1↔2 voltage: {self._safe_galvanic_zone_voltage():g} V."
+            + " Phase 4 UX active: batch previews, keyboard review, Why?, rule sandbox, correction-to-rule, diff viewer, copy summary."
         )
 
     def _selected_voltage_assignment_nets(self) -> list[str]:
@@ -1048,6 +1212,9 @@ class ClearanceGui(ttk.Frame):
             if len(nets) > 4:
                 preview += ", ..."
             self.voltage_selected_net.set(f"{len(nets)} selected: {preview}")
+
+        mixed, value = self._common_voltage_assignment_value(assignments, lambda a: normalize_galvanic_zone(getattr(a, "galvanic_zone", "")))
+        self.voltage_galvanic_zone.set(_MIXED_ZONE_SELECTION if mixed else normalize_galvanic_zone(value))
 
         mixed, value = self._common_voltage_assignment_value(assignments, lambda a: a.final_class)
         self.voltage_final_class.set(_MIXED_CLASS_SELECTION if mixed else str(value or "UNKNOWN"))
@@ -1080,6 +1247,12 @@ class ClearanceGui(ttk.Frame):
             messagebox.showerror("Voltage Guessing", "Choose one valid review state before applying the bulk edit.")
             return
 
+        galvanic_zone = self.voltage_galvanic_zone.get().strip()
+        if galvanic_zone == _MIXED_ZONE_SELECTION:
+            messagebox.showerror("Voltage Guessing", "Choose one galvanic zone, or clear the zone field, before applying the bulk edit.")
+            return
+        galvanic_zone = normalize_galvanic_zone(galvanic_zone)
+
         voltage_text = self.voltage_final_voltage.get().strip()
         if voltage_text == _MIXED_VOLTAGE_SELECTION:
             messagebox.showerror("Voltage Guessing", "Enter one voltage value, or clear the voltage field, before applying the bulk edit.")
@@ -1101,6 +1274,7 @@ class ClearanceGui(ttk.Frame):
                 final_voltage_v=voltage,
                 review_state=review_state,
                 notes=self.voltage_notes.get().strip(),
+                galvanic_zone=galvanic_zone,
             )
         except (KeyError, ValueError) as exc:
             messagebox.showerror("Voltage Guessing", str(exc))
@@ -1117,9 +1291,82 @@ class ClearanceGui(ttk.Frame):
                 self._on_voltage_assignment_selected()
         self._append_log(f"Voltage Guessing: manual override applied to {changed} selected net(s).")
 
+    def _apply_voltage_galvanic_zone_only(self, *, clear: bool = False) -> None:
+        nets = self._selected_voltage_assignment_nets()
+        if not nets:
+            messagebox.showinfo("Voltage Guessing", "Select one or more net assignments first.")
+            return
+        if clear:
+            galvanic_zone = ""
+        else:
+            raw_zone = self.voltage_galvanic_zone.get().strip()
+            if raw_zone == _MIXED_ZONE_SELECTION:
+                messagebox.showerror("Voltage Guessing", "Choose Zone 1, Zone 2, or use Clear galvanic zone for the selected nets.")
+                return
+            galvanic_zone = normalize_galvanic_zone(raw_zone)
+            if not galvanic_zone:
+                messagebox.showerror("Voltage Guessing", "Choose Zone 1 or Zone 2, or use Clear galvanic zone.")
+                return
+        try:
+            changed = review_service.apply_galvanic_zone_bulk(self.voltage_store, nets, galvanic_zone=galvanic_zone)
+        except (KeyError, ValueError) as exc:
+            messagebox.showerror("Voltage Guessing", str(exc))
+            return
+        self._save_voltage_store_safely()
+        self._refresh_voltage_views()
+        tree = self.voltage_assignment_tree
+        if tree is not None:
+            existing = [net for net in nets if tree.exists(net)]
+            if existing:
+                tree.selection_set(*existing)
+                tree.see(existing[0])
+                self._on_voltage_assignment_selected()
+        action = "cleared galvanic zone from" if clear else f"applied {galvanic_zone} to"
+        self._append_log(f"Voltage Guessing: {action} {changed} selected net(s) without changing voltage values.")
+
+    def _save_voltage_settings_safely(self) -> None:
+        """Persist voltage-guessing settings even before any net is assigned.
+
+        The output folder may already contain an assignment store from a
+        previous session that has not been loaded yet (the store is only
+        loaded on metadata read / analysis, not when the output folder is
+        picked).  Saving the fresh in-memory store in that state would
+        atomically replace the file and destroy all reviewed assignments,
+        so load and merge into the existing store first, and refuse to
+        overwrite a store that exists but cannot be read.
+        """
+
+        desired = self._current_voltage_guessing_settings()
+        self._sync_voltage_settings_to_store()
+        out = self.output_dir.get().strip()
+        if not out:
+            return
+        path = assignment_store_path(Path(out))
+        if path.exists() and str(path) != self.voltage_store_loaded_from:
+            self._load_voltage_store_if_present()
+            if str(path) != self.voltage_store_loaded_from:
+                messagebox.showerror(
+                    "Voltage Guessing",
+                    f"An existing assignment store at\n{path}\ncould not be read, so it was not overwritten.\n"
+                    "Fix or move the file, then apply the setting again.",
+                )
+                return
+            # Loading restored the on-disk settings into the GUI fields;
+            # re-apply the values the user just entered before saving.
+            self._apply_voltage_guessing_settings(desired, source="applied setting")
+            if not hasattr(self.voltage_store, "settings") or self.voltage_store.settings is None:
+                self.voltage_store.settings = {}
+            self.voltage_store.settings.update(desired)
+        try:
+            save_assignment_store_atomic(self.voltage_store, path)
+            self.voltage_store_loaded_from = str(path)
+        except OSError as exc:
+            messagebox.showerror("Voltage Guessing", f"Could not save voltage settings: {exc}")
+
     def _save_voltage_store_safely(self) -> None:
         if not self.voltage_assignments:
             return
+        self._sync_voltage_settings_to_store()
         out = self.output_dir.get().strip()
         if not out:
             return
@@ -1139,6 +1386,7 @@ class ClearanceGui(ttk.Frame):
         try:
             self.voltage_store = load_assignment_store(path)
             self.voltage_store_loaded_from = str(path)
+            self._apply_voltage_guessing_settings(getattr(self.voltage_store, "settings", {}) or {}, source=path.name)
             self._refresh_voltage_views()
             gate = review_service.review_gate_status(self.voltage_store, self.voltage_gate_mode.get())
             self._append_log(
@@ -1247,10 +1495,66 @@ class ClearanceGui(ttk.Frame):
             return
         if gate.stamp_text:
             self._append_log(f"Voltage Guessing export warning: {gate.stamp_text}")
-        files = export_all_voltage_files(list(self.voltage_assignments.values()), Path(self.output_dir.get()), project_revision=self._voltage_project_revision())
+        files = export_all_voltage_files(
+            list(self.voltage_assignments.values()),
+            Path(self.output_dir.get()),
+            project_revision=self._voltage_project_revision(),
+            voltage_guessing_settings=self._current_voltage_guessing_settings(),
+        )
+        zone_export = self._export_galvanic_zone_report(show_dialog=False)
+        if zone_export is not None:
+            files["galvanic_zone_spacing_csv"] = zone_export[0]
         self._refresh_voltage_overview()
         self._append_log("Voltage Guessing: exported " + ", ".join(path.name for path in files.values()))
         messagebox.showinfo("Voltage Guessing", "Exported voltage files:\n" + "\n".join(str(path) for path in files.values()))
+
+    def _export_galvanic_zone_report_dialog(self) -> None:
+        self._export_galvanic_zone_report(show_dialog=True)
+
+    def _export_galvanic_zone_report(self, *, show_dialog: bool = True):
+        """Export Zone 1 ↔ Zone 2 spacing check from current analysis measurements."""
+
+        if self.last_result is None or not getattr(self.last_result, "measurements", None):
+            if show_dialog:
+                messagebox.showinfo("Galvanic zone report", "Run analysis first so spacing measurements are available.")
+            return None
+        if not self.voltage_assignments:
+            if show_dialog:
+                messagebox.showinfo("Galvanic zone report", "Create voltage assignments and assign nets to Zone 1 / Zone 2 first.")
+            return None
+        voltage = self._validated_galvanic_zone_voltage(show_error=show_dialog)
+        if voltage is None:
+            return None
+        out = self.output_dir.get().strip()
+        if not out:
+            if show_dialog:
+                messagebox.showinfo("Galvanic zone report", "Choose an output folder first.")
+            return None
+        try:
+            path, rows, fails = export_galvanic_zone_spacing_csv(
+                self.last_result,
+                self.voltage_store,
+                Path(out) / GALVANIC_ZONE_REPORT_CSV,
+                inter_zone_voltage_v=voltage,
+            )
+        except OSError as exc:
+            if show_dialog:
+                messagebox.showerror("Galvanic zone report", f"Could not export galvanic zone report: {exc}")
+            else:
+                self._append_log(f"Voltage Guessing: could not export galvanic zone report: {exc}")
+            return None
+        if rows == 0:
+            self._append_log("Voltage Guessing: galvanic zone report has no Zone 1 ↔ Zone 2 measured pairs.")
+            if show_dialog:
+                messagebox.showinfo("Galvanic zone report", "No measured pairs found between Zone 1 and Zone 2. Assign at least one net to each zone and run analysis.")
+            return None
+        self._append_log(f"Voltage Guessing: exported {path.name} with {rows} Zone 1 ↔ Zone 2 row(s), {fails} fail/unknown.")
+        if show_dialog:
+            messagebox.showinfo(
+                "Galvanic zone report",
+                f"Exported {path}\n\nRows: {rows}\nFail/unknown: {fails}\nRequired Zone 1 ↔ Zone 2 voltage: {voltage:g} V",
+            )
+        return path, rows, fails
 
     def _validate_voltage_rule_pack_dialog(self) -> None:
         rule_pack = self._current_voltage_rule_pack()
@@ -1311,7 +1615,10 @@ class ClearanceGui(ttk.Frame):
             self.voltage_sandbox_result.set("Rule sandbox: enter a test net name.")
             return
         result = self._current_voltage_rule_pack()
-        guess = guess_voltage_for_nets([net], result, result.defaults)[0]
+        defaults = self._current_voltage_defaults(result, show_error=True)
+        if defaults is None:
+            return
+        guess = guess_voltage_for_nets([net], result, defaults)[0]
         why = phase4.explain_assignment(guess)
         self.voltage_sandbox_result.set(why.text)
 
@@ -2040,6 +2347,7 @@ class ClearanceGui(ttk.Frame):
             export_effective_max_voltage=bool(self.export_effective_max_voltage.get()),
             export_ipc2221a_max_voltage=bool(self.export_ipc2221a_max_voltage.get()),
             isolation_settings=self._isolation_settings_dict(),
+            voltage_guessing=self._current_voltage_guessing_settings(),
         )
 
     def _current_settings_profile(self, *, source: str = "gui_manual_export") -> dict:
@@ -2134,6 +2442,7 @@ class ClearanceGui(ttk.Frame):
         self.export_effective_max_voltage.set(bool(config.export_effective_max_voltage))
         self.export_ipc2221a_max_voltage.set(bool(config.export_ipc2221a_max_voltage))
         self._apply_isolation_settings(dict(getattr(config, "isolation_settings", {}) or {}))
+        self._apply_voltage_guessing_settings(dict(getattr(config, "voltage_guessing", {}) or {}), source="settings JSON")
         self._refresh_layer_role_tree()
         self._refresh_iec_layer_tree()
         self._update_voltage_settings_preview()
@@ -2935,7 +3244,7 @@ class ClearanceGui(ttk.Frame):
         ttk.Label(topbar, text="Double-click a row or click View geometry to inspect reconstructed copper.").pack(side=LEFT)
         ttk.Button(topbar, text="View selected geometry", command=self._open_selected_critical_geometry).pack(side=RIGHT)
 
-        columns = ("layer", "net_a", "net_b", "clearance", "max_voltage", "ipc_voltage", "point_a", "point_b")
+        columns = ("layer", "net_a", "net_b", "clearance", "max_voltage", "ipc_voltage", "required_voltage", "ok_nok", "voltage_margin", "voltage_delta", "voltage_source", "zone_a", "zone_b", "point_a", "point_b")
         tree = self._make_tree_with_scrollbars(parent, columns)
         headings = {
             "layer": "Layer",
@@ -2944,14 +3253,21 @@ class ClearanceGui(ttk.Frame):
             "clearance": "Clearance mm",
             "max_voltage": "Effective max voltage V",
             "ipc_voltage": "IPC-2221A max voltage V",
+            "required_voltage": "Required voltage V",
+            "ok_nok": "OK/NOK",
+            "voltage_margin": "Voltage margin V",
+            "voltage_delta": "Voltage difference V",
+            "voltage_source": "Voltage source",
+            "zone_a": "Zone A",
+            "zone_b": "Zone B",
             "point_a": "Point A mm",
             "point_b": "Point B mm",
         }
-        widths = {"layer": 80, "net_a": 230, "net_b": 230, "clearance": 110, "max_voltage": 170, "ipc_voltage": 180, "point_a": 130, "point_b": 130}
+        widths = {"layer": 80, "net_a": 230, "net_b": 230, "clearance": 110, "max_voltage": 170, "ipc_voltage": 180, "required_voltage": 140, "ok_nok": 80, "voltage_margin": 130, "voltage_delta": 150, "voltage_source": 130, "zone_a": 90, "zone_b": 90, "point_a": 130, "point_b": 130}
         for col in columns:
             tree.heading(col, text=headings[col])
             tree.column(col, width=widths[col], anchor="w")
-        self._install_tree_sorting(tree, numeric_columns={"clearance", "max_voltage", "ipc_voltage", "point_a", "point_b"})
+        self._install_tree_sorting(tree, numeric_columns={"clearance", "max_voltage", "ipc_voltage", "required_voltage", "voltage_margin", "voltage_delta", "point_a", "point_b"})
         tree.bind("<Double-1>", lambda _event: self._open_selected_critical_geometry())
         return tree
 
@@ -2961,23 +3277,30 @@ class ClearanceGui(ttk.Frame):
         ttk.Label(topbar, text="Shows each net's worst clearance. Double-click a row or click View geometry.").pack(side=LEFT)
         ttk.Button(topbar, text="View selected geometry", command=self._open_selected_per_net_geometry).pack(side=RIGHT)
 
-        columns = ("net", "clearance", "max_voltage", "ipc_voltage", "layer", "other", "point_this", "point_other")
+        columns = ("net", "clearance", "max_voltage", "ipc_voltage", "required_voltage", "ok_nok", "voltage_margin", "voltage_delta", "voltage_source", "zone_a", "zone_b", "layer", "other", "point_this", "point_other")
         tree = self._make_tree_with_scrollbars(parent, columns)
         headings = {
             "net": "Net",
             "clearance": "Minimum mm",
             "max_voltage": "Effective max voltage V",
             "ipc_voltage": "IPC-2221A max voltage V",
+            "required_voltage": "Required voltage V",
+            "ok_nok": "OK/NOK",
+            "voltage_margin": "Voltage margin V",
+            "voltage_delta": "Voltage difference V",
+            "voltage_source": "Voltage source",
+            "zone_a": "Zone A",
+            "zone_b": "Zone B",
             "layer": "Layer",
             "other": "Other net",
             "point_this": "This point mm",
             "point_other": "Other point mm",
         }
-        widths = {"net": 230, "clearance": 110, "max_voltage": 170, "ipc_voltage": 180, "layer": 80, "other": 230, "point_this": 130, "point_other": 130}
+        widths = {"net": 230, "clearance": 110, "max_voltage": 170, "ipc_voltage": 180, "required_voltage": 140, "ok_nok": 80, "voltage_margin": 130, "voltage_delta": 150, "voltage_source": 130, "zone_a": 90, "zone_b": 90, "layer": 80, "other": 230, "point_this": 130, "point_other": 130}
         for col in columns:
             tree.heading(col, text=headings[col])
             tree.column(col, width=widths[col], anchor="w")
-        self._install_tree_sorting(tree, numeric_columns={"clearance", "max_voltage", "ipc_voltage", "point_this", "point_other"})
+        self._install_tree_sorting(tree, numeric_columns={"clearance", "max_voltage", "ipc_voltage", "required_voltage", "voltage_margin", "voltage_delta", "point_this", "point_other"})
         tree.bind("<Double-1>", lambda _event: self._open_selected_per_net_geometry())
         return tree
 
@@ -3078,7 +3401,7 @@ class ClearanceGui(ttk.Frame):
         ).pack(side=LEFT)
         ttk.Button(topbar, text="View selected geometry", command=self._open_selected_airgap_geometry).pack(side=RIGHT)
 
-        columns = ("layer", "net_a", "net_b", "direct", "effective", "max_voltage", "ipc_voltage", "blocked", "copper", "blockers", "point_a", "point_b")
+        columns = ("layer", "net_a", "net_b", "direct", "effective", "max_voltage", "ipc_voltage", "required_voltage", "ok_nok", "voltage_margin", "voltage_delta", "voltage_source", "zone_a", "zone_b", "blocked", "copper", "blockers", "point_a", "point_b")
         tree = self._make_tree_with_scrollbars(parent, columns)
         headings = {
             "layer": "Layer",
@@ -3088,6 +3411,13 @@ class ClearanceGui(ttk.Frame):
             "effective": "Effective Net-to-Net distance mm",
             "max_voltage": "Effective max voltage V",
             "ipc_voltage": "IPC-2221A max voltage V",
+            "required_voltage": "Required voltage V",
+            "ok_nok": "OK/NOK",
+            "voltage_margin": "Voltage margin V",
+            "voltage_delta": "Voltage difference V",
+            "voltage_source": "Voltage source",
+            "zone_a": "Zone A",
+            "zone_b": "Zone B",
             "blocked": "Copper blocked mm",
             "copper": "Copper on path",
             "blockers": "Blocker nets",
@@ -3102,6 +3432,13 @@ class ClearanceGui(ttk.Frame):
             "effective": 190,
             "max_voltage": 170,
             "ipc_voltage": 180,
+            "required_voltage": 140,
+            "ok_nok": 80,
+            "voltage_margin": 130,
+            "voltage_delta": 150,
+            "voltage_source": 130,
+            "zone_a": 90,
+            "zone_b": 90,
             "blocked": 130,
             "copper": 120,
             "blockers": 320,
@@ -3111,7 +3448,7 @@ class ClearanceGui(ttk.Frame):
         for col in columns:
             tree.heading(col, text=headings[col])
             tree.column(col, width=widths[col], anchor="w")
-        self._install_tree_sorting(tree, numeric_columns={"direct", "effective", "max_voltage", "ipc_voltage", "blocked", "point_a", "point_b"})
+        self._install_tree_sorting(tree, numeric_columns={"direct", "effective", "max_voltage", "ipc_voltage", "required_voltage", "voltage_margin", "voltage_delta", "blocked", "point_a", "point_b"})
         tree.bind("<Double-1>", lambda _event: self._open_selected_airgap_geometry())
         return tree
 
@@ -3254,6 +3591,16 @@ class ClearanceGui(ttk.Frame):
             ("Effective Net-to-Net distance rows", str(len(result.effective_air_gap_records))),
             ("Output folder", str(result.config.output_dir)),
         ]
+        if self.voltage_assignments:
+            h = summarize_voltage_requirements_for_measurements(result.measurements, self.voltage_store, self._current_voltage_guessing_settings())
+            summary.extend([
+                ("Voltage hierarchy - Zone 1 nets", str(h["zone_1_nets"])),
+                ("Voltage hierarchy - Zone 2 nets", str(h["zone_2_nets"])),
+                ("Voltage hierarchy - Cross-zone pairs", str(h["cross_zone_pairs"])),
+                ("Voltage hierarchy - Cross-zone PASS/FAIL/UNKNOWN", f"{h['cross_zone_pass']} / {h['cross_zone_fail']} / {h['cross_zone_unknown']}"),
+                ("Voltage hierarchy - Local-voltage pairs", str(h["local_voltage_pairs"])),
+                ("Voltage hierarchy - Incomplete-zone warnings", str(h["incomplete_zone_pairs"])),
+            ])
         for field, value in summary:
             idx = len(self.summary_text.get_children())
             self.summary_text.insert("", END, text=field, values=(value,), tags=("even" if idx % 2 == 0 else "odd",))
@@ -3270,11 +3617,43 @@ class ClearanceGui(ttk.Frame):
         self._fill_airgap_table(result.effective_air_gap_records[:1000])
         if hasattr(self, "isolation_tree"):
             self.isolation_status.set("Main analysis complete. Press Calculate isolated-side spacing to update this tab.")
-        self._refresh_voltage_overview()
+        # Repaint assignment/review/overview tables after analysis. If a store
+        # was already loaded before re-analysis, _load_voltage_store_if_present()
+        # is a no-op; without this refresh the All Assignments tab could remain
+        # empty after the analysis-result view was cleared.
+        self._refresh_voltage_views()
+
+    def _voltage_display_resolver(self) -> VoltageRequirementResolver:
+        """Snapshot resolver for filling result tables; build once per refresh."""
+
+        settings = self._current_voltage_guessing_settings()
+        if self.voltage_store is not None:
+            merged = dict(getattr(self.voltage_store, "settings", {}) or {})
+            merged.update(settings)
+            return VoltageRequirementResolver(self.voltage_assignments, merged)
+        return VoltageRequirementResolver({}, settings)
+
+    def _voltage_requirement_for_display(self, net_a: str, net_b: str, resolver: VoltageRequirementResolver | None = None):
+        if resolver is None:
+            resolver = self._voltage_display_resolver()
+        return resolver.resolve(net_a, net_b)
+
+    def _fmt_requirement_voltage(self, value) -> str:
+        return self._fmt_voltage(value)
+
+    def _voltage_ok_nok_for_display(self, record, req) -> tuple[str, str]:
+        status, margin = resolve_voltage_standard_compliance(
+            getattr(req, "required_voltage_v", None),
+            getattr(record, "effective_max_voltage_v", None),
+        )
+        return status, self._fmt_requirement_voltage(margin)
 
     def _fill_critical_table(self, records: list[MeasurementRecord]) -> None:
         self.visible_critical_records = list(records)
+        resolver = self._voltage_display_resolver()
         for idx, rec in enumerate(self.visible_critical_records):
+            req = self._voltage_requirement_for_display(rec.net_a, rec.net_b, resolver)
+            ok_nok, margin = self._voltage_ok_nok_for_display(rec, req)
             self.critical_tree.insert(
                 "",
                 END,
@@ -3287,6 +3666,13 @@ class ClearanceGui(ttk.Frame):
                     f"{rec.clearance_mm:.6f}",
                     self._fmt_voltage(rec.effective_max_voltage_v),
                     self._fmt_voltage(rec.ipc2221a_max_voltage_v),
+                    self._fmt_requirement_voltage(req.required_voltage_v),
+                    ok_nok,
+                    margin,
+                    self._fmt_requirement_voltage(req.voltage_difference_v),
+                    req.requirement_source,
+                    req.zone_a,
+                    req.zone_b,
                     self._fmt_point(rec.x_a_mm, rec.y_a_mm),
                     self._fmt_point(rec.x_b_mm, rec.y_b_mm),
                 ),
@@ -3294,7 +3680,10 @@ class ClearanceGui(ttk.Frame):
 
     def _fill_per_net_table(self, records: list[PerNetMinimum]) -> None:
         self.visible_per_net_records = list(records)
+        resolver = self._voltage_display_resolver()
         for idx, rec in enumerate(self.visible_per_net_records):
+            req = self._voltage_requirement_for_display(rec.net, rec.other_net, resolver)
+            ok_nok, margin = self._voltage_ok_nok_for_display(rec, req)
             self.per_net_tree.insert(
                 "",
                 END,
@@ -3305,6 +3694,13 @@ class ClearanceGui(ttk.Frame):
                     f"{rec.min_clearance_mm:.6f}",
                     self._fmt_voltage(rec.effective_max_voltage_v),
                     self._fmt_voltage(rec.ipc2221a_max_voltage_v),
+                    self._fmt_requirement_voltage(req.required_voltage_v),
+                    ok_nok,
+                    margin,
+                    self._fmt_requirement_voltage(req.voltage_difference_v),
+                    req.requirement_source,
+                    req.zone_a,
+                    req.zone_b,
                     rec.layer,
                     rec.other_net,
                     self._fmt_point(rec.x_this_mm, rec.y_this_mm),
@@ -3356,8 +3752,11 @@ class ClearanceGui(ttk.Frame):
 
     def _fill_airgap_table(self, records) -> None:
         self.visible_airgap_records = list(records)
+        resolver = self._voltage_display_resolver()
         for idx, rec in enumerate(self.visible_airgap_records):
             tag = self._clearance_row_tag(rec.effective_air_gap_mm, idx, zero_is_critical=False) if bool(self.clearance_gradient.get()) else ("critical" if rec.copper_on_path else ("even" if idx % 2 == 0 else "odd"))
+            req = self._voltage_requirement_for_display(rec.net_a, rec.net_b, resolver)
+            ok_nok, margin = self._voltage_ok_nok_for_display(rec, req)
             self.airgap_tree.insert(
                 "",
                 END,
@@ -3371,6 +3770,13 @@ class ClearanceGui(ttk.Frame):
                     f"{rec.effective_air_gap_mm:.6f}",
                     self._fmt_voltage(rec.effective_max_voltage_v),
                     self._fmt_voltage(rec.ipc2221a_max_voltage_v),
+                    self._fmt_requirement_voltage(req.required_voltage_v),
+                    ok_nok,
+                    margin,
+                    self._fmt_requirement_voltage(req.voltage_difference_v),
+                    req.requirement_source,
+                    req.zone_a,
+                    req.zone_b,
                     f"{rec.copper_blocked_length_mm:.6f}",
                     str(rec.copper_on_path),
                     rec.blocker_nets,
@@ -3644,7 +4050,12 @@ class ClearanceGui(ttk.Frame):
         self.visible_critical_records = []
         self.visible_per_net_records = []
         self.visible_airgap_records = []
-        for tree in (self.summary_text, self.log, self.critical_tree, self.per_net_tree, self.feature_attr_tree, self.debug_tree, self.airgap_tree, self.voltage_assignment_tree):
+        # Clear only analysis-result tables here. Voltage assignments are a
+        # separate review artifact and must survive geometry navigation and
+        # re-analysis. Clearing voltage_assignment_tree here caused the All
+        # Assignments tab to appear empty after a user had already assigned
+        # nets, opened geometry, and returned to continue corrections.
+        for tree in (self.summary_text, self.log, self.critical_tree, self.per_net_tree, self.feature_attr_tree, self.debug_tree, self.airgap_tree):
             if tree is None:
                 continue
             for item in tree.get_children():

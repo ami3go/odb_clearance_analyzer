@@ -104,3 +104,81 @@ def test_gui_voltage_net_list_falls_back_to_analysis_outputs_when_job_net_table_
     )
 
     assert _collect_voltage_net_names_from_result(result) == {"3V3", "GND", "HV_400V", "L1", "N"}
+
+
+def test_cell_number_rule_uses_configurable_max_cell_voltage():
+    from dataclasses import replace
+
+    from odb_clearance_analyzer.voltage_guessing import guess_net_voltage, load_rule_pack
+
+    pack = load_rule_pack()
+    default_guess = guess_net_voltage("Cell3", pack)
+    assert default_guess.guessed_class == "BATTERY"
+    assert default_guess.winning_rule_id == "battery_cell_number"
+    assert abs(default_guess.guessed_voltage_v - 12.9) < 1e-9
+
+    custom_defaults = replace(pack.defaults, battery_volts_per_cell_max=4.1)
+    custom_guess = guess_net_voltage("BAT_CELL_6", pack, custom_defaults)
+    assert custom_guess.guessed_class == "BATTERY"
+    assert abs(custom_guess.guessed_voltage_v - 24.6) < 1e-9
+
+
+def test_voltage_guessing_max_cell_voltage_persists_in_settings_profile(tmp_path):
+    from pathlib import Path
+
+    from odb_clearance_analyzer.models import AnalysisConfig
+    from odb_clearance_analyzer.settings_profile import analysis_config_to_profile, profile_to_analysis_config
+
+    config = AnalysisConfig(
+        odb_path=Path("example.tgz"),
+        output_dir=tmp_path,
+        voltage_guessing={"assignment_store_path": "net_voltage_assignments.json", "max_cell_voltage_v": 4.35},
+    )
+    profile = analysis_config_to_profile(config, app_version="test", include_paths=True, source="unit_test")
+    assert profile["settings"]["voltage_guessing"]["max_cell_voltage_v"] == 4.35
+
+    restored = profile_to_analysis_config(profile)
+    assert restored.voltage_guessing["max_cell_voltage_v"] == 4.35
+
+
+def test_assignment_store_persists_voltage_guessing_settings(tmp_path):
+    import json
+
+    from odb_clearance_analyzer.voltage_guessing.assignment_store import create_assignment_store, load_assignment_store, save_assignment_store_atomic
+
+    store = create_assignment_store([], settings={"max_cell_voltage_v": 4.25})
+    path = tmp_path / "net_voltage_assignments.json"
+    save_assignment_store_atomic(store, path)
+    payload = json.loads(path.read_text())
+    assert payload["settings"]["max_cell_voltage_v"] == 4.25
+
+    restored = load_assignment_store(path)
+    assert restored.settings["max_cell_voltage_v"] == 4.25
+
+def test_cell_and_ntc_net_name_masks_from_user_examples():
+    from odb_clearance_analyzer.voltage_guessing import guess_net_voltage, load_rule_pack, normalize_net_name
+
+    pack = load_rule_pack()
+
+    assert normalize_net_name("stack_cell10+") == "STACK_CELL10"
+    assert normalize_net_name("stack_cell10-") == "STACK_CELL10"
+
+    for net in ["stack_cell10+", "stack_cell10-", "STACK_CELL10"]:
+        result = guess_net_voltage(net, pack)
+        assert result.guessed_class == "BATTERY", (net, result)
+        assert result.winning_rule_id == "battery_cell_number", (net, result)
+        assert abs(result.guessed_voltage_v - 43.0) < 1e-9, (net, result)
+
+    for net in ["Cell0", "Cell0+", "STACK_CELL0+"]:
+        result = guess_net_voltage(net, pack)
+        assert result.guessed_class == "GND", (net, result)
+        assert result.winning_rule_id == "battery_cell_zero_ground", (net, result)
+        assert result.guessed_voltage_v == 0, (net, result)
+        assert result.to_assignment().review_state == "Approved", (net, result)
+
+    for net in ["BMIC_NTC3+", "BMIC_PCB_NTC1+", "NTC"]:
+        result = guess_net_voltage(net, pack)
+        assert result.guessed_class == "IO_ANALOG", (net, result)
+        assert result.winning_rule_id == "ntc_low_voltage_max", (net, result)
+        assert abs(result.guessed_voltage_v - 5.5) < 1e-9, (net, result)
+

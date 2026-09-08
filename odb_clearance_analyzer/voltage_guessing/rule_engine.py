@@ -117,7 +117,10 @@ def _voltage_for_rule(rule: VoltageRule, net_name: str, match, defaults: Voltage
         elif hasattr(match, "groups") and match.groups():
             cells = match.group(1)
         try:
-            return int(cells) * float(rule.volts_per_cell or defaults.battery_volts_per_cell_max)
+            cell_count = int(cells)
+            if cell_count <= 0:
+                return None
+            return cell_count * float(rule.volts_per_cell or defaults.battery_volts_per_cell_max)
         except Exception:
             return None
     if rule.voltage_v is not None:

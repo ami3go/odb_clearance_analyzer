@@ -97,7 +97,7 @@ def _load_defaults(path: Path) -> VoltageDefaults:
     return VoltageDefaults(
         mains_rms_v=float(data.get("mains_rms_v", 230.0)),
         mains_peak_v=float(data.get("mains_peak_v", 325.0)),
-        battery_volts_per_cell_max=float(data.get("battery_volts_per_cell_max", 4.2)),
+        battery_volts_per_cell_max=float(data.get("battery_volts_per_cell_max", 4.3)),
         logic_io_v=float(data.get("logic_io_v", 3.3)),
         analog_io_v=float(data.get("analog_io_v", 3.3)),
         usb_vbus_v=float(data.get("usb_vbus_v", 5.0)),

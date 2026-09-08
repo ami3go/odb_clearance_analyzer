@@ -8,7 +8,8 @@ VDD_1V8,POWER,1.8,High,Info,Approved
 M12V,POWER_NEGATIVE,-12,High,,
 N12V,POWER_NEGATIVE,-12,High,,
 USB_VBUS,POWER,5,High,,
-BAT_4S,BATTERY,16.8,Medium,Warning,Needs review
+BAT_4S,BATTERY,17.2,Medium,Warning,Needs review
+Cell3,BATTERY,12.9,Medium,Warning,Needs review
 HV400,HIGH_VOLTAGE,400,High,Critical,Needs review
 DC_LINK_800V,HIGH_VOLTAGE,800,High,Critical,Needs review
 L1,MAINS,230,Medium,Critical,Needs review
@@ -20,3 +21,9 @@ L1_SW,UNKNOWN,,Unknown,Review,Needs review
 N_FET_G,UNKNOWN,,Unknown,Review,Needs review
 M2_CS,UNKNOWN,,Unknown,,
 CH4,UNKNOWN,,Unknown,,
+STACK_CELL10+,BATTERY,43,Medium,Warning,Needs review
+stack_cell10-,BATTERY,43,Medium,Warning,Needs review
+Cell0,GND,0,High,Info,Approved
+STACK_CELL0+,GND,0,High,Info,Approved
+BMIC_NTC3+,IO_ANALOG,5.5,Medium,Review,Needs review
+BMIC_PCB_NTC1+,IO_ANALOG,5.5,Medium,Review,Needs review

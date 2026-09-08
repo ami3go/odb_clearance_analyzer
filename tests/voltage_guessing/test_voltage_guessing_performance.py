@@ -54,3 +54,49 @@ def test_matching_pathological_all_unmatched_is_bounded():
     start = time.monotonic()
     match_revision(_imported(old), new, pack)
     assert time.monotonic() - start < 5.0  # was ~280s before blocking at this size
+
+
+def test_requirement_resolver_scales_to_20k_nets():
+    """Regression: per-pair resolution used to rescan all assignments
+    (O(rows x nets)); 20k pairs at 20k nets took minutes. With the
+    precomputing resolver it must stay well under a couple of seconds."""
+    from odb_clearance_analyzer.voltage_guessing.requirements import VoltageRequirementResolver
+
+    nets = [_mk(i) for i in range(20000)]
+    assignments = {
+        a.net_name: a for a in _imported(nets)
+    }
+    rng = random.Random(3)
+    pairs = [(rng.choice(nets), rng.choice(nets)) for _ in range(20000)]
+    start = time.monotonic()
+    resolver = VoltageRequirementResolver(assignments, {"galvanic_zone_voltage_v": 1000.0})
+    for a, b in pairs:
+        resolver.resolve(a, b)
+    assert time.monotonic() - start < 4.0  # 2x budget over a ~2s ceiling
+
+
+def test_requirement_resolver_matches_one_shot_function():
+    from odb_clearance_analyzer.voltage_guessing.requirements import (
+        VoltageRequirementResolver,
+        resolve_required_spacing_voltage,
+    )
+    from odb_clearance_analyzer.voltage_guessing.models import VoltageAssignment, VoltageEvidence
+
+    def _a(net, volts, zone=""):
+        return VoltageAssignment(
+            net_name=net, final_class="LV", final_voltage_v=volts, reference_net="",
+            voltage_type="DC", confidence="High", severity="Info",
+            review_state="Reviewed", source="manual", evidence=VoltageEvidence(),
+            galvanic_zone=zone,
+        )
+
+    assignments = {
+        "A": _a("A", 10.0, "Zone 1"),
+        "B": _a("B", 21.0, "Zone 2"),
+        "C": _a("C", 5.0, "Zone 1"),
+        "D": _a("D", None),
+    }
+    settings = {"galvanic_zone_voltage_v": 1200.0}
+    resolver = VoltageRequirementResolver(assignments, settings)
+    for a, b in [("A", "B"), ("A", "C"), ("A", "D"), ("GND", "A"), ("X", "Y")]:
+        assert resolver.resolve(a, b) == resolve_required_spacing_voltage(a, b, assignments, settings)

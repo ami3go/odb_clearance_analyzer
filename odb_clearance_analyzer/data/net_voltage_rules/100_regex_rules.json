@@ -65,6 +65,38 @@
       "warning": "Confirm negative rail voltage"
     },
     {
+      "rule_id": "ntc_low_voltage_max",
+      "priority": 960,
+      "enabled": true,
+      "pattern": "(?:^|_)NTC\\d*(?:$|_)",
+      "match_type": "regex",
+      "match_on": "normalized",
+      "net_class": "IO_ANALOG",
+      "voltage_v": 5.5,
+      "reference_net": "best_ground",
+      "voltage_type": "DC",
+      "confidence": "Medium",
+      "severity": "Review",
+      "reason": "NTC thermistor/sense net defaults to 5.5 V maximum",
+      "warning": "Confirm NTC pull-up/reference voltage and BMIC input limit"
+    },
+    {
+      "rule_id": "battery_cell_zero_ground",
+      "priority": 1120,
+      "enabled": true,
+      "pattern": "(?:^|_)CELL_?0(?:$|_)",
+      "match_type": "regex",
+      "match_on": "normalized",
+      "net_class": "GND",
+      "voltage_v": 0,
+      "reference_net": "",
+      "voltage_type": "DC",
+      "confidence": "High",
+      "severity": "Info",
+      "reason": "Parsed Cell0 as battery-stack zero reference / ground potential",
+      "warning": ""
+    },
+    {
       "rule_id": "battery_cell_count",
       "priority": 900,
       "enabled": true,
@@ -81,6 +113,24 @@
       "severity": "Warning",
       "reason": "Parsed battery cell count using max cell voltage",
       "warning": "Confirm actual battery pack maximum voltage"
+    },
+    {
+      "rule_id": "battery_cell_number",
+      "priority": 910,
+      "enabled": true,
+      "pattern": "(?:^|_)CELL_?(?P<cells>\\d+)(?:$|_)",
+      "match_type": "regex",
+      "match_on": "normalized",
+      "net_class": "BATTERY",
+      "voltage_v": "",
+      "cell_count_from_pattern": true,
+      "volts_per_cell": "",
+      "reference_net": "best_ground",
+      "voltage_type": "DC",
+      "confidence": "Medium",
+      "severity": "Warning",
+      "reason": "Parsed Cell<number> cumulative battery node using max cell voltage",
+      "warning": "Confirm max cell voltage and whether this net represents cumulative cell-stack voltage"
     }
   ]
 }

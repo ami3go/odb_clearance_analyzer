@@ -4,11 +4,53 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="fdfe915a-8e13-43a3-9bf1-598a7b2fc35d" name="Changes" comment="" />
+    <list default="true" id="fdfe915a-8e13-43a3-9bf1-598a7b2fc35d" name="Changes" comment="">
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/CHANGELOG.md" beforeDir="false" afterPath="$PROJECT_DIR$/CHANGELOG.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/LICENSE" beforeDir="false" afterPath="$PROJECT_DIR$/LICENSE" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/README.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/docs/software_spec_v0.4.10.md" beforeDir="false" afterPath="$PROJECT_DIR$/docs/software_spec_v0.4.10.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/docs/software_spec_v0.4.11.md" beforeDir="false" afterPath="$PROJECT_DIR$/docs/software_spec_v0.4.11.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/docs/software_spec_v0.4.12.md" beforeDir="false" afterPath="$PROJECT_DIR$/docs/software_spec_v0.4.12.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/docs/software_spec_v0.4.13.md" beforeDir="false" afterPath="$PROJECT_DIR$/docs/software_spec_v0.4.13.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/docs/software_spec_v0.4.14.md" beforeDir="false" afterPath="$PROJECT_DIR$/docs/software_spec_v0.4.14.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/docs/software_spec_v0.4.4.md" beforeDir="false" afterPath="$PROJECT_DIR$/docs/software_spec_v0.4.4.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/docs/software_spec_v0.4.5.md" beforeDir="false" afterPath="$PROJECT_DIR$/docs/software_spec_v0.4.5.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/docs/software_spec_v0.4.6.md" beforeDir="false" afterPath="$PROJECT_DIR$/docs/software_spec_v0.4.6.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/docs/software_spec_v0.4.7.md" beforeDir="false" afterPath="$PROJECT_DIR$/docs/software_spec_v0.4.7.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/docs/software_spec_v0.4.8.md" beforeDir="false" afterPath="$PROJECT_DIR$/docs/software_spec_v0.4.8.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/docs/software_spec_v0.4.9.md" beforeDir="false" afterPath="$PROJECT_DIR$/docs/software_spec_v0.4.9.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/docs/user_manual_v0.4.14.md" beforeDir="false" afterPath="$PROJECT_DIR$/docs/user_manual_v0.4.14.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/odb_clearance_analyzer/__init__.py" beforeDir="false" afterPath="$PROJECT_DIR$/odb_clearance_analyzer/__init__.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/odb_clearance_analyzer/data/net_voltage_rules/100_regex_rules.json" beforeDir="false" afterPath="$PROJECT_DIR$/odb_clearance_analyzer/data/net_voltage_rules/100_regex_rules.json" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/odb_clearance_analyzer/data/net_voltage_rules/defaults.json" beforeDir="false" afterPath="$PROJECT_DIR$/odb_clearance_analyzer/data/net_voltage_rules/defaults.json" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/odb_clearance_analyzer/data/net_voltage_rules/net_voltage_rule_tests.csv" beforeDir="false" afterPath="$PROJECT_DIR$/odb_clearance_analyzer/data/net_voltage_rules/net_voltage_rule_tests.csv" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/odb_clearance_analyzer/geometry_viewer.py" beforeDir="false" afterPath="$PROJECT_DIR$/odb_clearance_analyzer/geometry_viewer.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/odb_clearance_analyzer/gui.py" beforeDir="false" afterPath="$PROJECT_DIR$/odb_clearance_analyzer/gui.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/odb_clearance_analyzer/models.py" beforeDir="false" afterPath="$PROJECT_DIR$/odb_clearance_analyzer/models.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/odb_clearance_analyzer/reports.py" beforeDir="false" afterPath="$PROJECT_DIR$/odb_clearance_analyzer/reports.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/odb_clearance_analyzer/settings_profile.py" beforeDir="false" afterPath="$PROJECT_DIR$/odb_clearance_analyzer/settings_profile.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/odb_clearance_analyzer/voltage_guessing/assignment_import.py" beforeDir="false" afterPath="$PROJECT_DIR$/odb_clearance_analyzer/voltage_guessing/assignment_import.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/odb_clearance_analyzer/voltage_guessing/assignment_store.py" beforeDir="false" afterPath="$PROJECT_DIR$/odb_clearance_analyzer/voltage_guessing/assignment_store.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/odb_clearance_analyzer/voltage_guessing/exports.py" beforeDir="false" afterPath="$PROJECT_DIR$/odb_clearance_analyzer/voltage_guessing/exports.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/odb_clearance_analyzer/voltage_guessing/models.py" beforeDir="false" afterPath="$PROJECT_DIR$/odb_clearance_analyzer/voltage_guessing/models.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/odb_clearance_analyzer/voltage_guessing/normalization.py" beforeDir="false" afterPath="$PROJECT_DIR$/odb_clearance_analyzer/voltage_guessing/normalization.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/odb_clearance_analyzer/voltage_guessing/review_service.py" beforeDir="false" afterPath="$PROJECT_DIR$/odb_clearance_analyzer/voltage_guessing/review_service.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/odb_clearance_analyzer/voltage_guessing/rule_engine.py" beforeDir="false" afterPath="$PROJECT_DIR$/odb_clearance_analyzer/voltage_guessing/rule_engine.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/odb_clearance_analyzer/voltage_guessing/rule_loader.py" beforeDir="false" afterPath="$PROJECT_DIR$/odb_clearance_analyzer/voltage_guessing/rule_loader.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/pyproject.toml" beforeDir="false" afterPath="$PROJECT_DIR$/pyproject.toml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/voltage_guessing/test_gui_smoke.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/voltage_guessing/test_gui_smoke.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/voltage_guessing/test_voltage_guessing_performance.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/voltage_guessing/test_voltage_guessing_performance.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/voltage_guessing/test_voltage_guessing_phase1.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/voltage_guessing/test_voltage_guessing_phase1.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/voltage_guessing/test_voltage_guessing_regression_fixes.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/voltage_guessing/test_voltage_guessing_regression_fixes.py" afterDir="false" />
+    </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
     <option name="LAST_RESOLUTION" value="IGNORE" />
+  </component>
+  <component name="Git.Settings">
+    <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
   </component>
   <component name="ProjectColorInfo">{
   &quot;associatedIndex&quot;: 4
@@ -23,6 +65,8 @@
     "ModuleVcsDetector.initialDetectionPerformed": "true",
     "Python.run_gui.executor": "Run",
     "RunOnceActivity.ShowReadmeOnStart": "true",
+    "RunOnceActivity.git.unshallow": "true",
+    "git-widget-placeholder": "main",
     "last_opened_file_path": "C:/Users/achestni/Documents/GitHub/odb_clearance_analyzer_package/odb_clearance_analyzer_pkg",
     "settings.editor.selected.configurable": "com.jetbrains.python.configuration.PyActiveSdkModuleConfigurable"
   }

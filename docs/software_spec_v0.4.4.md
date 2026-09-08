@@ -90,7 +90,7 @@ The application shall use:
 | Spreadsheet export | openpyxl. |
 | Packaging | Installable Python package with `pyproject.toml`. |
 | CLI entry | `odb-clearance-analyzer`. |
-| GUI entry | `odb-clearance-analyzer-gui` / `python -m odb_clearance_analyzer`. |
+| GUI entry | `odb-clearance-gui` / `python -m odb_clearance_analyzer`. |
 | Tests | pytest. |
 | Source layout | Package directory directly at repository root; no `src/` layout. |
 

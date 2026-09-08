@@ -8,7 +8,7 @@ import unicodedata
 from .models import NormalizeOptions
 
 
-_REPLACEMENTS = str.maketrans({"-": "_", ".": "_", " ": "_", "/": "_"})
+_REPLACEMENTS = str.maketrans({"-": "_", "+": "_", ".": "_", " ": "_", "/": "_"})
 _CONTROL_CATEGORIES = {"Cc", "Cf"}
 
 
@@ -16,8 +16,8 @@ def normalize_net_name(net_name: str, options: NormalizeOptions | None = None) -
     """Normalize one net name using the Rev C 9.5 algorithm.
 
     Steps: Unicode NFKC, reject control chars, uppercase, replace common
-    separators with ``_``, collapse repeated underscores, strip underscores,
-    optionally remove a leading plus sign.
+    separators, including trailing polarity markers, with ``_``, collapse repeated underscores,
+    strip underscores, optionally remove a leading plus sign.
     """
 
     options = options or NormalizeOptions()

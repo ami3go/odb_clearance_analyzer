@@ -193,7 +193,7 @@ class AnalysisConfig:
     export_effective_max_voltage: bool = True
     export_ipc2221a_max_voltage: bool = True
     isolation_settings: dict[str, object] = field(default_factory=dict)
-    voltage_guessing: dict[str, object] = field(default_factory=lambda: {"assignment_store_path": "net_voltage_assignments.json"})
+    voltage_guessing: dict[str, object] = field(default_factory=lambda: {"assignment_store_path": "net_voltage_assignments.json", "max_cell_voltage_v": 4.3, "galvanic_zone_voltage_v": 1000.0, "zone_to_zone_voltage_v": 1000.0, "galvanic_zones_supported": ["Zone 1", "Zone 2"]})
 
 
 

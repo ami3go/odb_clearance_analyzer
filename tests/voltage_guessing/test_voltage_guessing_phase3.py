@@ -227,13 +227,35 @@ def test_import_json_skips_bad_voltage_values(tmp_path: Path):
     assert len(result.skipped_rows) == 2
 
 
-def test_import_rejects_project_assignment_store_file(tmp_path: Path):
+def test_import_accepts_project_assignment_store_file(tmp_path: Path):
     f = tmp_path / "net_voltage_assignments.json"
     f.write_text(json.dumps({
         "schema_version": 1,
         "file_kind": "net_voltage_assignment_store",
+        "project_revision": "rev_store",
         "assignments": {"GND": {"final_class": "GND", "final_voltage_v": 0, "review_state": "Approved"}},
+        "settings": {"galvanic_zone_voltage_v": 1000.0},
+        "undo_stack": [],
     }), encoding="utf-8")
     result = import_voltage_assignments(f)
-    assert not result.ok
-    assert "project assignment store" in result.rejected_reason
+    assert result.ok, result.rejected_reason
+    assert result.source_revision == "rev_store"
+    assert len(result.assignments) == 1
+    assert result.assignments[0].net_name == "GND"
+    assert result.assignments[0].final_voltage_v == 0.0
+
+
+def test_import_csv_accepts_assigned_voltage_alias(tmp_path: Path):
+    f = tmp_path / "net_voltage_assignments.csv"
+    f.write_text(
+        "net_name,normalized_name,assigned_voltage_v,final_class,review_state,galvanic_zone\n"
+        "NET_A,NET_A,21,POWER,Approved,Zone 1\n"
+        "GND,GND,0,GND,Approved,Zone 1\n",
+        encoding="utf-8",
+    )
+    result = import_voltage_assignments(f)
+    assert result.ok, result.rejected_reason
+    by_name = {a.net_name: a for a in result.assignments}
+    assert by_name["NET_A"].final_voltage_v == 21.0
+    assert by_name["NET_A"].galvanic_zone == "Zone 1"
+    assert by_name["GND"].final_voltage_v == 0.0

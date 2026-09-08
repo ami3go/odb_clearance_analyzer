@@ -70,7 +70,8 @@ def test_common_net_guesses():
         "USB_VBUS": ("POWER", 5.0, "High"),
         "VBUS_PD": ("POWER_VARIABLE", 20.0, "Medium"),
         "POE_VIN": ("POWER_HIGHER_LOW_VOLTAGE", 57.0, "Medium"),
-        "BAT_4S": ("BATTERY", 16.8, "Medium"),
+        "BAT_4S": ("BATTERY", 17.2, "Medium"),
+        "Cell3": ("BATTERY", 12.9, "Medium"),
         "CANH": ("COMMUNICATION", None, "Medium"),
         "SEC_GND": ("GND", 0.0, "High"),
     }

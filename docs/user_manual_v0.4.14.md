@@ -55,7 +55,7 @@ The tool expects copper layer data and net information to be present in the expo
 Run:
 
 ```bash
-odb-clearance-analyzer-gui
+odb-clearance-gui
 ```
 
 Or:

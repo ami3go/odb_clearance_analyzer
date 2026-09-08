@@ -1,0 +1,381 @@
+{
+  "assignments": {
+    "3V3": {
+      "confidence": "High",
+      "evidence": {
+        "all_matched_rule_ids": [
+          "power_3v3",
+          "positive_voltage_token"
+        ],
+        "evidence_type": "rule_match",
+        "import_match_score": null,
+        "import_match_status": "",
+        "imported_from_file": "",
+        "last_exported_value": null,
+        "manual_review_note": "",
+        "matched_pattern": "3V3",
+        "matched_rule_file": "020_power_rails.csv",
+        "matched_rule_id": "power_3v3",
+        "matched_rule_pack": "builtin_default",
+        "rule_reason": "Known 3.3 V rail",
+        "rule_warning": ""
+      },
+      "final_class": "POWER",
+      "final_voltage_v": 3.3,
+      "galvanic_zone": "",
+      "last_seen_revision": "",
+      "net_name": "3V3",
+      "notes": "",
+      "reference_net": "best_ground",
+      "review_reason": "",
+      "review_state": "Approved",
+      "reviewed_at_utc": "",
+      "reviewed_by": "",
+      "severity": "Info",
+      "source": "rule",
+      "source_revision": "",
+      "voltage_type": "DC",
+      "waiver": {
+        "waived": false,
+        "waived_at_utc": "",
+        "waived_by": "",
+        "waiver_expires_revision": "",
+        "waiver_reason": "",
+        "waiver_scope": ""
+      }
+    },
+    "DC_LINK_800V": {
+      "confidence": "High",
+      "evidence": {
+        "all_matched_rule_ids": [
+          "hv_numeric_voltage",
+          "hv_hint",
+          "positive_voltage_token"
+        ],
+        "evidence_type": "rule_match",
+        "import_match_score": null,
+        "import_match_status": "",
+        "imported_from_file": "",
+        "last_exported_value": null,
+        "manual_review_note": "",
+        "matched_pattern": "(?:^|_)(?:HV|HV_BUS|VBUS_HV|DC_LINK|DCLINK|PFC|BULK|RECT|VBOOST)_?(?P<voltage>\\d+V\\d*|\\d+V|\\d{3,4})(?:$|_)",
+        "matched_rule_file": "100_regex_rules.json",
+        "matched_rule_id": "hv_numeric_voltage",
+        "matched_rule_pack": "builtin_default",
+        "rule_reason": "Parsed numeric high-voltage token",
+        "rule_warning": "High-voltage net requires review"
+      },
+      "final_class": "HIGH_VOLTAGE",
+      "final_voltage_v": 800.0,
+      "galvanic_zone": "",
+      "last_seen_revision": "",
+      "net_name": "DC_LINK_800V",
+      "notes": "",
+      "reference_net": "best_ground",
+      "review_reason": "",
+      "review_state": "Needs review",
+      "reviewed_at_utc": "",
+      "reviewed_by": "",
+      "severity": "Critical",
+      "source": "rule",
+      "source_revision": "",
+      "voltage_type": "DC",
+      "waiver": {
+        "waived": false,
+        "waived_at_utc": "",
+        "waived_by": "",
+        "waiver_expires_revision": "",
+        "waiver_reason": "",
+        "waiver_scope": ""
+      }
+    },
+    "GND": {
+      "confidence": "High",
+      "evidence": {
+        "all_matched_rule_ids": [
+          "gnd_exact_gnd",
+          "gnd_token_gnd"
+        ],
+        "evidence_type": "rule_match",
+        "import_match_score": null,
+        "import_match_status": "",
+        "imported_from_file": "",
+        "last_exported_value": null,
+        "manual_review_note": "",
+        "matched_pattern": "GND",
+        "matched_rule_file": "010_ground_aliases.csv",
+        "matched_rule_id": "gnd_exact_gnd",
+        "matched_rule_pack": "builtin_default",
+        "rule_reason": "Known ground alias",
+        "rule_warning": ""
+      },
+      "final_class": "GND",
+      "final_voltage_v": 0.0,
+      "galvanic_zone": "",
+      "last_seen_revision": "",
+      "net_name": "GND",
+      "notes": "",
+      "reference_net": "",
+      "review_reason": "",
+      "review_state": "Approved",
+      "reviewed_at_utc": "",
+      "reviewed_by": "",
+      "severity": "Info",
+      "source": "rule",
+      "source_revision": "",
+      "voltage_type": "DC",
+      "waiver": {
+        "waived": false,
+        "waived_at_utc": "",
+        "waived_by": "",
+        "waiver_expires_revision": "",
+        "waiver_reason": "",
+        "waiver_scope": ""
+      }
+    },
+    "L1": {
+      "confidence": "Medium",
+      "evidence": {
+        "all_matched_rule_ids": [
+          "mains_l1"
+        ],
+        "evidence_type": "manual_override",
+        "import_match_score": null,
+        "import_match_status": "",
+        "imported_from_file": "",
+        "last_exported_value": null,
+        "manual_review_note": "bulk selected in All Assignments",
+        "matched_pattern": "L1",
+        "matched_rule_file": "030_mains_aliases.csv",
+        "matched_rule_id": "mains_l1",
+        "matched_rule_pack": "builtin_default",
+        "rule_reason": "Mains phase alias",
+        "rule_warning": "Confirm mains voltage manually"
+      },
+      "final_class": "HIGH_VOLTAGE",
+      "final_voltage_v": 120.0,
+      "galvanic_zone": "",
+      "last_seen_revision": "",
+      "net_name": "L1",
+      "notes": "bulk selected in All Assignments",
+      "reference_net": "",
+      "review_reason": "bulk selected in All Assignments",
+      "review_state": "Reviewed",
+      "reviewed_at_utc": "2026-09-08T15:03:52Z",
+      "reviewed_by": "ACHESTNI",
+      "severity": "Critical",
+      "source": "manual",
+      "source_revision": "",
+      "voltage_type": "AC_RMS",
+      "waiver": {
+        "waived": false,
+        "waived_at_utc": "",
+        "waived_by": "",
+        "waiver_expires_revision": "",
+        "waiver_reason": "",
+        "waiver_scope": ""
+      }
+    },
+    "MYSTERY": {
+      "confidence": "Unknown",
+      "evidence": {
+        "all_matched_rule_ids": [],
+        "evidence_type": "manual_override",
+        "import_match_score": null,
+        "import_match_status": "",
+        "imported_from_file": "",
+        "last_exported_value": null,
+        "manual_review_note": "bulk selected in All Assignments",
+        "matched_pattern": "",
+        "matched_rule_file": "",
+        "matched_rule_id": "",
+        "matched_rule_pack": "",
+        "rule_reason": "No deterministic net-name rule matched.",
+        "rule_warning": "Review voltage manually."
+      },
+      "final_class": "HIGH_VOLTAGE",
+      "final_voltage_v": 120.0,
+      "galvanic_zone": "",
+      "last_seen_revision": "",
+      "net_name": "MYSTERY",
+      "notes": "bulk selected in All Assignments",
+      "reference_net": "",
+      "review_reason": "bulk selected in All Assignments",
+      "review_state": "Reviewed",
+      "reviewed_at_utc": "2026-09-08T15:03:52Z",
+      "reviewed_by": "ACHESTNI",
+      "severity": "Review",
+      "source": "manual",
+      "source_revision": "",
+      "voltage_type": "UNKNOWN",
+      "waiver": {
+        "waived": false,
+        "waived_at_utc": "",
+        "waived_by": "",
+        "waiver_expires_revision": "",
+        "waiver_reason": "",
+        "waiver_scope": ""
+      }
+    }
+  },
+  "created_utc": "2026-09-08T15:03:52Z",
+  "file_kind": "net_voltage_assignment_store",
+  "modified_utc": "2026-09-08T15:03:52Z",
+  "project_revision": "",
+  "review_session": {
+    "active_filter": "",
+    "queue_position": 0,
+    "skipped_nets": [],
+    "sort_key": ""
+  },
+  "schema_version": 1,
+  "settings": {
+    "assignment_store_path": "net_voltage_assignments.json",
+    "galvanic_zone_voltage_v": 1000.0,
+    "galvanic_zones_supported": [
+      "Zone 1",
+      "Zone 2"
+    ],
+    "max_cell_voltage_v": 4.3,
+    "zone_to_zone_voltage_v": 1000.0
+  },
+  "undo_stack": [
+    {
+      "changed": {
+        "__created__": {
+          "confidence": "Unknown",
+          "evidence": {
+            "all_matched_rule_ids": [],
+            "evidence_type": "undo_created_sentinel",
+            "import_match_score": null,
+            "import_match_status": "",
+            "imported_from_file": "",
+            "last_exported_value": null,
+            "manual_review_note": "",
+            "matched_pattern": "",
+            "matched_rule_file": "",
+            "matched_rule_id": "",
+            "matched_rule_pack": "",
+            "rule_reason": "",
+            "rule_warning": ""
+          },
+          "final_class": "UNKNOWN",
+          "final_voltage_v": null,
+          "galvanic_zone": "",
+          "last_seen_revision": "",
+          "net_name": "3V3;DC_LINK_800V;GND;L1;MYSTERY",
+          "notes": "",
+          "reference_net": "",
+          "review_reason": "",
+          "review_state": "Needs review",
+          "reviewed_at_utc": "",
+          "reviewed_by": "",
+          "severity": "Info",
+          "source": "unknown",
+          "source_revision": "",
+          "voltage_type": "UNKNOWN",
+          "waiver": {
+            "waived": false,
+            "waived_at_utc": "",
+            "waived_by": "",
+            "waiver_expires_revision": "",
+            "waiver_reason": "",
+            "waiver_scope": ""
+          }
+        }
+      },
+      "operation": "auto_detect",
+      "timestamp_utc": "2026-09-08T15:03:52Z"
+    },
+    {
+      "changed": {
+        "L1": {
+          "confidence": "Medium",
+          "evidence": {
+            "all_matched_rule_ids": [
+              "mains_l1"
+            ],
+            "evidence_type": "rule_match",
+            "import_match_score": null,
+            "import_match_status": "",
+            "imported_from_file": "",
+            "last_exported_value": null,
+            "manual_review_note": "",
+            "matched_pattern": "L1",
+            "matched_rule_file": "030_mains_aliases.csv",
+            "matched_rule_id": "mains_l1",
+            "matched_rule_pack": "builtin_default",
+            "rule_reason": "Mains phase alias",
+            "rule_warning": "Confirm mains voltage manually"
+          },
+          "final_class": "MAINS",
+          "final_voltage_v": 230.0,
+          "galvanic_zone": "",
+          "last_seen_revision": "",
+          "net_name": "L1",
+          "notes": "",
+          "reference_net": "",
+          "review_reason": "",
+          "review_state": "Needs review",
+          "reviewed_at_utc": "",
+          "reviewed_by": "",
+          "severity": "Critical",
+          "source": "rule",
+          "source_revision": "",
+          "voltage_type": "AC_RMS",
+          "waiver": {
+            "waived": false,
+            "waived_at_utc": "",
+            "waived_by": "",
+            "waiver_expires_revision": "",
+            "waiver_reason": "",
+            "waiver_scope": ""
+          }
+        },
+        "MYSTERY": {
+          "confidence": "Unknown",
+          "evidence": {
+            "all_matched_rule_ids": [],
+            "evidence_type": "no_match",
+            "import_match_score": null,
+            "import_match_status": "",
+            "imported_from_file": "",
+            "last_exported_value": null,
+            "manual_review_note": "",
+            "matched_pattern": "",
+            "matched_rule_file": "",
+            "matched_rule_id": "",
+            "matched_rule_pack": "",
+            "rule_reason": "No deterministic net-name rule matched.",
+            "rule_warning": "Review voltage manually."
+          },
+          "final_class": "UNKNOWN",
+          "final_voltage_v": null,
+          "galvanic_zone": "",
+          "last_seen_revision": "",
+          "net_name": "MYSTERY",
+          "notes": "",
+          "reference_net": "",
+          "review_reason": "",
+          "review_state": "Needs review",
+          "reviewed_at_utc": "",
+          "reviewed_by": "",
+          "severity": "Review",
+          "source": "unknown",
+          "source_revision": "",
+          "voltage_type": "UNKNOWN",
+          "waiver": {
+            "waived": false,
+            "waived_at_utc": "",
+            "waived_by": "",
+            "waiver_expires_revision": "",
+            "waiver_reason": "",
+            "waiver_scope": ""
+          }
+        }
+      },
+      "operation": "manual_bulk_edit",
+      "timestamp_utc": "2026-09-08T15:03:52Z"
+    }
+  ]
+}

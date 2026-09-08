@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 
 from .assignment_store import utc_now
 from .enums import REVIEW_STATES, validate_choice
-from .models import AssignmentStore, RulePack, UndoEntry, VoltageAssignment, VoltageEvidence
+from .models import AssignmentStore, RulePack, UndoEntry, VoltageAssignment, VoltageDefaults, VoltageEvidence
 from .rule_engine import guess_voltage_for_nets
 
 UNDO_STACK_DEPTH = 20
@@ -58,13 +58,13 @@ def _push_undo(store: AssignmentStore, operation: str, changed_nets: list[str], 
     del store.undo_stack[:-UNDO_STACK_DEPTH]
 
 
-def run_auto_detect(store: AssignmentStore, net_names: list[str], rule_pack: RulePack, *, source_revision: str = "") -> int:
+def run_auto_detect(store: AssignmentStore, net_names: list[str], rule_pack: RulePack, *, source_revision: str = "", defaults: VoltageDefaults | None = None) -> int:
     """Guess all nets; preserve manual and imported assignments (Rev C 9.8/28).
 
     Returns the number of assignments changed or added. Records one undo entry.
     """
     previous = dict(store.assignments)
-    guessed = guess_voltage_for_nets(net_names, rule_pack, rule_pack.defaults, source_revision=source_revision)
+    guessed = guess_voltage_for_nets(net_names, rule_pack, defaults or rule_pack.defaults, source_revision=source_revision)
     changed_nets: list[str] = []
     merged: dict[str, VoltageAssignment] = dict(previous)
     for assignment in guessed:
@@ -92,6 +92,7 @@ def _apply_manual_override_to_assignment(
     notes: str,
     reviewer: str,
     reviewed_at_utc: str,
+    galvanic_zone: str | None = None,
 ) -> VoltageAssignment:
     updated = copy.deepcopy(assignment)
     updated.final_class = final_class or "UNKNOWN"
@@ -102,6 +103,8 @@ def _apply_manual_override_to_assignment(
     updated.review_reason = notes
     updated.reviewed_by = reviewer
     updated.reviewed_at_utc = reviewed_at_utc
+    if galvanic_zone is not None:
+        updated.galvanic_zone = galvanic_zone
     updated.evidence.evidence_type = "manual_override"
     updated.evidence.manual_review_note = notes
     return updated
@@ -116,6 +119,7 @@ def apply_manual_override_bulk(
     review_state: str = "Reviewed",
     notes: str = "",
     reviewer: str | None = None,
+    galvanic_zone: str | None = None,
 ) -> int:
     """Apply one manual voltage correction to multiple assignments.
 
@@ -149,8 +153,50 @@ def apply_manual_override_bulk(
             notes=notes,
             reviewer=who,
             reviewed_at_utc=now,
+            galvanic_zone=galvanic_zone,
         )
     _push_undo(store, "manual_bulk_edit" if len(unique_nets) > 1 else "manual_edit", unique_nets, previous)
+    return len(unique_nets)
+
+
+
+
+def apply_galvanic_zone_bulk(
+    store: AssignmentStore,
+    nets: list[str],
+    *,
+    galvanic_zone: str,
+    reviewer: str | None = None,
+) -> int:
+    """Apply only the galvanic zone to selected assignments.
+
+    This intentionally preserves voltage class, voltage value, review state,
+    notes, and source.  It is safer than a full manual override when assigning
+    many unrelated nets to the same isolation domain.
+    """
+    unique_nets: list[str] = []
+    seen: set[str] = set()
+    for net in nets:
+        if net in seen:
+            continue
+        seen.add(net)
+        if net not in store.assignments:
+            raise KeyError(f"Unknown net: {net}")
+        unique_nets.append(net)
+
+    if not unique_nets:
+        return 0
+
+    previous = dict(store.assignments)
+    who = reviewer or default_reviewer()
+    now = utc_now()
+    for net in unique_nets:
+        updated = copy.deepcopy(store.assignments[net])
+        updated.galvanic_zone = galvanic_zone
+        updated.reviewed_by = updated.reviewed_by or who
+        updated.reviewed_at_utc = updated.reviewed_at_utc or now
+        store.assignments[net] = updated
+    _push_undo(store, "galvanic_zone_bulk_edit" if len(unique_nets) > 1 else "galvanic_zone_edit", unique_nets, previous)
     return len(unique_nets)
 
 
@@ -163,6 +209,7 @@ def apply_manual_override(
     review_state: str = "Reviewed",
     notes: str = "",
     reviewer: str | None = None,
+    galvanic_zone: str | None = None,
 ) -> VoltageAssignment:
     changed = apply_manual_override_bulk(
         store,
@@ -172,6 +219,7 @@ def apply_manual_override(
         review_state=review_state,
         notes=notes,
         reviewer=reviewer,
+        galvanic_zone=galvanic_zone,
     )
     if not changed:
         raise KeyError(f"Unknown net: {net}")

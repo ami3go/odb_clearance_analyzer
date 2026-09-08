@@ -17,6 +17,7 @@ from .assignment_store import STORE_FILE_KIND, STORE_SCHEMA_VERSION
 from .enums import CONFIDENCE_VALUES, NET_CLASSES, REVIEW_STATES, SEVERITY_VALUES
 from .exports import EXPORT_FILE_KIND
 from .models import VoltageAssignment
+from .galvanic_zones import normalize_galvanic_zone
 
 
 @dataclass
@@ -31,7 +32,15 @@ class AssignmentImportResult:
     source_revision: str = ""
 
 
-_REQUIRED_CSV_COLUMNS = {"net_name", "final_class", "final_voltage_v", "review_state"}
+_REQUIRED_CSV_COLUMNS = {"net_name", "final_class", "review_state"}
+_VOLTAGE_CSV_COLUMNS = ("final_voltage_v", "assigned_voltage_v", "guessed_voltage_v", "voltage_v")
+
+
+def _pick_voltage_csv_column(headers: set[str]) -> str | None:
+    for name in _VOLTAGE_CSV_COLUMNS:
+        if name in headers:
+            return name
+    return None
 
 
 def _parse_voltage_value(value, *, row_label: str) -> tuple[bool, float | None, str]:
@@ -82,12 +91,7 @@ def _import_json(path: Path, result: AssignmentImportResult) -> AssignmentImport
         return result
 
     kind = data.get("file_kind")
-    if kind == STORE_FILE_KIND:
-        result.rejected_reason = (
-            "This is a project assignment store. Export an assignment snapshot and import that instead."
-        )
-        return result
-    if kind not in {None, EXPORT_FILE_KIND}:
+    if kind not in {None, EXPORT_FILE_KIND, STORE_FILE_KIND}:
         result.rejected_reason = f"Unsupported file_kind: {kind!r}"
         return result
 
@@ -142,6 +146,13 @@ def _import_csv(path: Path, result: AssignmentImportResult) -> AssignmentImportR
             if missing:
                 result.rejected_reason = f"Missing required columns: {', '.join(sorted(missing))}"
                 return result
+            voltage_column = _pick_voltage_csv_column(headers)
+            if voltage_column is None:
+                result.rejected_reason = (
+                    "Missing required voltage column: one of "
+                    + ", ".join(_VOLTAGE_CSV_COLUMNS)
+                )
+                return result
             seen: set[str] = set()
             duplicates: set[str] = set()
             rows = list(reader)
@@ -164,7 +175,7 @@ def _import_csv(path: Path, result: AssignmentImportResult) -> AssignmentImportR
         if not net:
             result.skipped_rows.append((line_no, "empty net_name"))
             continue
-        voltage_raw = str(row.get("final_voltage_v", "")).strip()
+        voltage_raw = str(row.get(voltage_column, "")).strip()
         ok_voltage, voltage, voltage_problem = _parse_voltage_value(voltage_raw, row_label=net)
         if not ok_voltage:
             result.skipped_rows.append((line_no, voltage_problem))
@@ -180,6 +191,7 @@ def _import_csv(path: Path, result: AssignmentImportResult) -> AssignmentImportR
                 "severity": row.get("severity", "Review"),
                 "review_state": row.get("review_state", "Needs review"),
                 "source": row.get("source", "unknown"),
+                "galvanic_zone": normalize_galvanic_zone(row.get("galvanic_zone", "")),
                 "reviewed_by": row.get("reviewed_by", ""),
                 "reviewed_at_utc": row.get("reviewed_at_utc", ""),
                 "review_reason": row.get("review_reason", ""),

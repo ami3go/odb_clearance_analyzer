@@ -77,6 +77,7 @@ def export_voltage_assignments_csv(assignments: list[VoltageAssignment], path: P
         "severity",
         "review_state",
         "source",
+        "galvanic_zone",
         "reviewed_by",
         "reviewed_at_utc",
         "review_reason",
@@ -102,6 +103,7 @@ def export_voltage_assignments_csv(assignments: list[VoltageAssignment], path: P
                     "severity": a.severity,
                     "review_state": a.review_state,
                     "source": a.source,
+                    "galvanic_zone": getattr(a, "galvanic_zone", ""),
                     "reviewed_by": a.reviewed_by,
                     "reviewed_at_utc": a.reviewed_at_utc,
                     "review_reason": a.review_reason,
@@ -116,7 +118,7 @@ def export_voltage_assignments_csv(assignments: list[VoltageAssignment], path: P
     return path
 
 
-def export_voltage_assignments_json(assignments: list[VoltageAssignment], path: Path, *, project_revision: str = "") -> Path:
+def export_voltage_assignments_json(assignments: list[VoltageAssignment], path: Path, *, project_revision: str = "", voltage_guessing_settings: dict[str, object] | None = None) -> Path:
     """Write an export SNAPSHOT (assignments only) — not the project store.
 
     Per addendum 12.1.1 the snapshot excludes review_session and undo_stack
@@ -129,6 +131,7 @@ def export_voltage_assignments_json(assignments: list[VoltageAssignment], path: 
         "file_kind": EXPORT_FILE_KIND,
         "project_revision": project_revision,
         "exported_at_utc": utc_now(),
+        "voltage_guessing_settings": dict(voltage_guessing_settings or {}),
         "assignments": {a.net_name: a.to_dict() for a in sorted(assignments, key=lambda i: i.net_name)},
     }
     tmp = path.with_suffix(path.suffix + ".tmp")
@@ -141,12 +144,12 @@ def export_voltage_assignments_json(assignments: list[VoltageAssignment], path: 
     return path
 
 
-def export_all_voltage_files(assignments: list[VoltageAssignment], output_dir: Path, *, project_revision: str = "") -> dict[str, Path]:
+def export_all_voltage_files(assignments: list[VoltageAssignment], output_dir: Path, *, project_revision: str = "", voltage_guessing_settings: dict[str, object] | None = None) -> dict[str, Path]:
     output_dir.mkdir(parents=True, exist_ok=True)
     return {
         "voltage_guessing_csv": export_voltage_guessing_csv(assignments, output_dir / GUESSING_CSV),
         "voltage_assignments_json": export_voltage_assignments_json(
-            assignments, output_dir / export_json_name(project_revision), project_revision=project_revision
+            assignments, output_dir / export_json_name(project_revision), project_revision=project_revision, voltage_guessing_settings=voltage_guessing_settings
         ),
         "voltage_assignments_csv": export_voltage_assignments_csv(assignments, output_dir / ASSIGNMENTS_CSV),
     }

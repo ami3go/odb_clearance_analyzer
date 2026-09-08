@@ -23,7 +23,7 @@ def assignment_store_path(output_dir: Path) -> Path:
     return Path(output_dir) / DEFAULT_ASSIGNMENT_STORE_NAME
 
 
-def create_assignment_store(assignments: list[VoltageAssignment], *, project_revision: str = "") -> AssignmentStore:
+def create_assignment_store(assignments: list[VoltageAssignment], *, project_revision: str = "", settings: dict[str, object] | None = None) -> AssignmentStore:
     now = utc_now()
     return AssignmentStore(
         schema_version=STORE_SCHEMA_VERSION,
@@ -31,6 +31,7 @@ def create_assignment_store(assignments: list[VoltageAssignment], *, project_rev
         assignments={assignment.net_name: assignment for assignment in assignments},
         review_session=ReviewSessionState(),
         undo_stack=[],
+        settings=dict(settings or {}),
         created_utc=now,
         modified_utc=now,
     )
@@ -44,6 +45,7 @@ def store_to_dict(store: AssignmentStore) -> dict:
         "created_utc": store.created_utc,
         "modified_utc": store.modified_utc,
         "review_session": asdict(store.review_session),
+        "settings": dict(getattr(store, "settings", {}) or {}),
         "assignments": {net: assignment.to_dict() for net, assignment in sorted(store.assignments.items())},
         "undo_stack": [
             {
@@ -90,6 +92,7 @@ def _store_from_dict(data: dict) -> AssignmentStore:
             skipped_nets=list(session_raw.get("skipped_nets", []) or []),
         ),
         undo_stack=undo_stack,
+        settings=dict(data.get("settings", {}) or {}),
         created_utc=str(data.get("created_utc", "")),
         modified_utc=str(data.get("modified_utc", "")),
     )

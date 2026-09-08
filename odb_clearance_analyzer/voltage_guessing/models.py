@@ -25,7 +25,7 @@ class VoltageToken:
 class VoltageDefaults:
     mains_rms_v: float = 230.0
     mains_peak_v: float = 325.0
-    battery_volts_per_cell_max: float = 4.2
+    battery_volts_per_cell_max: float = 4.3
     logic_io_v: float = 3.3
     analog_io_v: float = 3.3
     usb_vbus_v: float = 5.0
@@ -80,6 +80,7 @@ class VoltageAssignment:
     review_reason: str = ""
     source_revision: str = ""
     last_seen_revision: str = ""
+    galvanic_zone: str = ""
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -106,6 +107,7 @@ class VoltageAssignment:
             review_reason=str(data.get("review_reason", "")),
             source_revision=str(data.get("source_revision", "")),
             last_seen_revision=str(data.get("last_seen_revision", "")),
+            galvanic_zone=str(data.get("galvanic_zone", "")),
         )
 
 
@@ -250,6 +252,7 @@ class AssignmentStore:
     assignments: dict[str, VoltageAssignment]
     review_session: ReviewSessionState = field(default_factory=ReviewSessionState)
     undo_stack: list[UndoEntry] = field(default_factory=list)
+    settings: dict[str, object] = field(default_factory=dict)
     created_utc: str = ""
     modified_utc: str = ""
 

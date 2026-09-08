@@ -23,8 +23,9 @@ The tool reconstructs same-layer copper geometry, measures net-to-net spacing, h
 - Supports JSON settings profiles for reproducible analysis.
 - Deterministic **Voltage Guessing**: classifies every net's voltage class/value from editable
   name rules (no AI/LLM), with a keyboard review queue, waivers, revision import with
-  rename matching, project-local correction rules, review gates for exports, and full
-  undo — all persisted across restarts. See `docs/voltage_guessing_user_manual_v0.4.22.md`.
+  rename matching, project-local correction rules, review gates for exports, full undo,
+  and two galvanic zones (`Zone 1` / `Zone 2`) for higher-level isolation checks — all
+  persisted across restarts. See `docs/voltage_guessing_user_manual_v0.4.22.md`.
 
 ---
 
@@ -200,7 +201,7 @@ sudo apt install python3-tk
 After installation:
 
 ```bash
-odb-clearance-analyzer-gui
+odb-clearance-gui
 ```
 
 Or run as a module:
@@ -442,19 +443,18 @@ python -c "import odb_clearance_analyzer.gui as g; print(g.__version__)"
 ## Current version
 
 ```text
-0.4.14
+0.4.37
 ```
 
 Recent additions:
 
-- IEC 61558 / IEC 62368 isolation tab.
-- Isolated-side net group screening.
-- JSON settings export for isolation variables.
-- Geometry Viewer Fast mode.
-- Zoom min 2/3 button.
-- Blocker-dot visualization.
-- Compact input/output/analysis controls.
-- Accurate dense ground-pour rendering.
+- Data-loss protection when applying zone-to-zone voltage before assignments are loaded.
+- Cached `VoltageRequirementResolver` for large net-pair report generation.
+- Explicit zone-to-zone voltage setup and JSON persistence.
+- Pair voltage-difference reporting for all net pairs.
+- OK/NOK voltage status and voltage margin columns in reports.
+- Geometry Viewer startup fix.
+- Assigned-voltage export in CSV, Excel, and Markdown reports.
 
 ---
 
@@ -554,6 +554,28 @@ Regenerated API reference from live signatures
 guessing user manual with robustness notes, added voltage CLI examples to
 this README, and introduced `CHANGELOG.md`.
 
+
+## v0.4.27 Voltage Guessing cell/NTC mask refinements
+
+Voltage Guessing now strips trailing `+` / `-` polarity markers during normalized rule matching, so names such as `stack_cell10+` and `stack_cell10-` are treated as `STACK_CELL10` and assigned from the configurable max-cell-voltage formula.
+
+Additional deterministic masks were added:
+
+- `Cell0`, `Cell0+`, `STACK_CELL0+` → `GND`, `0 V`, approved.
+- `BMIC_NTC3+`, `BMIC_PCB_NTC1+`, and other nets with an `NTC` token → `IO_ANALOG`, `5.5 V max`, needs review.
+
+## v0.4.26 Voltage Guessing configurable cell voltage
+
+Voltage Guessing now includes a **Max cell voltage, V** field on the Overview
+tab. The default is **4.3 V/cell**. It is used by cumulative battery cell-count
+rules, for example `BAT_4S = 4 × Max cell voltage` and `Cell3 = 3 × Max cell
+voltage`.
+
+The value is saved in the project/settings JSON under
+`settings.voltage_guessing.max_cell_voltage_v` and in the voltage assignment
+project store JSON under `settings.max_cell_voltage_v`, so reopening or loading
+a project restores the same rule assumption.
+
 ## v0.4.25 Voltage Guessing bulk assignment editing
 
 The All Assignments tab now supports bulk manual edits. Select multiple net rows
@@ -562,3 +584,86 @@ with Shift/Ctrl, set the desired Class/Voltage/Review/Notes once, and click
 `manual_bulk_edit` operation. Mixed selections show explicit placeholder values
 so the user must choose a final class/review state and either enter or clear the
 voltage before applying.
+
+
+
+## v0.4.33 Pair voltage difference correction
+
+For same-zone and local net-pair checks, the analyzer now uses the actual pair voltage difference:
+
+```text
+voltage_difference_v = abs(net_a_voltage_v - net_b_voltage_v)
+```
+
+Examples:
+
+- Net A = 10 V, Net B = 21 V → `voltage_difference_v = 11 V`
+- Net A = 10 V, Net B = 0 V or common GND net name → `voltage_difference_v = 10 V`
+
+This pair-difference value is also the local `required_voltage_v` for same-zone pairs. Cross-zone Zone 1 ↔ Zone 2 pairs still use the higher-priority configured zone working voltage for `required_voltage_v`, while `voltage_difference_v` remains visible as diagnostic data.
+
+## v0.4.32 OK/NOK voltage compliance columns
+
+Main clearance reports now include an explicit **OK/NOK** voltage screening column.
+
+- `standard_voltage_status` is `OK` when the hierarchy-resolved `required_voltage_v` is less than or equal to the calculated `effective_max_voltage_v`.
+- It is `NOK` when the required/actual voltage is higher than the calculated maximum supported voltage from the active standard settings.
+- It is `UNKNOWN` when either the required voltage or calculated supported voltage is unavailable.
+- `voltage_margin_v = effective_max_voltage_v - required_voltage_v`; positive margin is OK, negative margin is NOK.
+
+This check uses the final voltage hierarchy result, so Zone 1 ↔ Zone 2 voltage priority is respected.
+
+
+## v0.4.31 Assigned voltage report export and voltage difference
+
+This release improves report traceability for voltage-based clearance review.
+
+- The automatic report package now includes `net_voltage_assignments.csv`.
+- The Excel report now includes an **Assigned voltages** sheet.
+- The Markdown report now includes an **Assigned Voltages** preview section.
+- Main clearance CSV/Excel/Markdown outputs now include `voltage_difference_v`, calculated as `abs(Net A assigned voltage - Net B assigned voltage)` when both assigned voltages are known.
+- The large `net_to_net_effective_air_gap_matrix.csv` also includes the voltage difference column, alongside final required voltage/source/zone hierarchy columns.
+
+`voltage_difference_v` is diagnostic information. The final spacing check should still use `required_voltage_v`, because cross-zone pairs intentionally use the higher-priority Zone 1 ↔ Zone 2 working voltage.
+
+## v0.4.30 Geometry Viewer startup fix
+
+- Fixed Geometry Viewer crash when opened from Overview, Critical Pairs, Per-Net Minimum, Effective Net-to-Net, or Debug rows.
+- The **Voltage assignment** button callback now belongs to `GeometryViewer` itself, so the viewer finishes constructing its canvas and scrollbars correctly.
+- Added a Tk smoke regression test that opens the viewer with the Voltage Assignment callback enabled.
+
+## v0.4.29 Voltage Guessing galvanic zones
+
+Voltage Guessing now has a two-zone galvanic model for isolation-style review:
+
+- Assign selected nets to **Zone 1** or **Zone 2** in the **All Assignments** tab. Shift/Ctrl multi-select is supported for bulk edits.
+- Set **Zone 1 ↔ Zone 2 voltage, V** in the Voltage Guessing Overview tab or in the All Assignments detail panel. The default is **1000 V**.
+- Press **Apply zone-to-zone voltage** to validate and save the setting to the project assignment JSON. This can be done before any nets are assigned.
+- JSON exports include both `galvanic_zone_voltage_v` and the clearer alias `zone_to_zone_voltage_v`; either key is accepted on import/load.
+- The zone voltage is treated as a higher-level voltage requirement for any measured pair where one net belongs to Zone 1 and the other belongs to Zone 2.
+- Exports include `galvanic_zone_spacing.csv` when analysis measurements and Zone 1/Zone 2 assignments are available. Rows include clearance, required zone voltage, supported effective max voltage, margin, and PASS/FAIL/UNKNOWN status.
+- Project assignment JSON, voltage assignment JSON/CSV, CSV import, and settings profile JSON preserve `galvanic_zone` and `galvanic_zone_voltage_v`.
+
+
+## v0.4.29 Voltage Requirement Hierarchy
+
+Voltage Guessing now resolves one required spacing voltage per measured net pair using a deterministic hierarchy:
+
+1. **Different galvanic zones** → use **Zone 1 ↔ Zone 2 working voltage**.
+2. **Same galvanic zone** → use local net/manual/class voltage.
+3. **Missing zone assignment** → use local net/manual/class voltage and mark a review warning.
+
+The local voltage resolver is intentionally conservative: it uses the maximum of net A voltage, net B voltage, and the absolute voltage difference. This prevents equal-voltage signal classes such as `3V3` ↔ `3V3` from being treated as `0 V`.
+
+Main spacing CSV/Excel/Markdown reports now include:
+
+- `required_voltage_v`
+- `voltage_source`
+- `zone_a` / `zone_b`
+- `zone_voltage_v`
+- `local_voltage_v`
+- `net_a_voltage_v` / `net_b_voltage_v`
+- `warning`
+
+In the **All Assignments** tab, use **Apply galvanic zone only to selected** or **Clear galvanic zone from selected** to safely assign Zone 1/Zone 2 without overwriting voltage class, voltage value, review state, or notes.
+

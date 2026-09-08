@@ -49,7 +49,7 @@ def analysis_config_to_profile(
             "export_effective_max_voltage": bool(config.export_effective_max_voltage),
             "export_ipc2221a_max_voltage": bool(config.export_ipc2221a_max_voltage),
             "isolation_settings": dict(getattr(config, "isolation_settings", {}) or {}),
-            "voltage_guessing": dict(getattr(config, "voltage_guessing", {}) or {"assignment_store_path": "net_voltage_assignments.json"}),
+            "voltage_guessing": dict(getattr(config, "voltage_guessing", {}) or {"assignment_store_path": "net_voltage_assignments.json", "max_cell_voltage_v": 4.3, "galvanic_zone_voltage_v": 1000.0, "zone_to_zone_voltage_v": 1000.0, "galvanic_zones_supported": ["Zone 1", "Zone 2"]}),
         },
     }
     if include_paths:
@@ -99,7 +99,7 @@ def profile_to_analysis_config(profile: dict[str, Any], *, base_config: Analysis
         export_effective_max_voltage=bool(get("export_effective_max_voltage", base_config.export_effective_max_voltage)),
         export_ipc2221a_max_voltage=bool(get("export_ipc2221a_max_voltage", base_config.export_ipc2221a_max_voltage)),
         isolation_settings=dict(get("isolation_settings", getattr(base_config, "isolation_settings", {}))),
-        voltage_guessing=dict(get("voltage_guessing", getattr(base_config, "voltage_guessing", {"assignment_store_path": "net_voltage_assignments.json"}))),
+        voltage_guessing=dict(get("voltage_guessing", getattr(base_config, "voltage_guessing", {"assignment_store_path": "net_voltage_assignments.json", "max_cell_voltage_v": 4.3, "galvanic_zone_voltage_v": 1000.0, "zone_to_zone_voltage_v": 1000.0, "galvanic_zones_supported": ["Zone 1", "Zone 2"]}))),
     )
 
 

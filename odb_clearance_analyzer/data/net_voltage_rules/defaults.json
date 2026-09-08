@@ -2,7 +2,7 @@
   "schema_version": 1,
   "mains_rms_v": 230.0,
   "mains_peak_v": 325.0,
-  "battery_volts_per_cell_max": 4.2,
+  "battery_volts_per_cell_max": 4.3,
   "logic_io_v": 3.3,
   "analog_io_v": 3.3,
   "usb_vbus_v": 5.0,
