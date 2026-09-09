@@ -28,4 +28,4 @@ install_zones_tab_scroll_support()
 install_zone_reset_value_support()
 install_zone_matrix_duplicate_mask_support()
 
-__version__ = "0.4.52"
+__version__ = "0.4.53"
