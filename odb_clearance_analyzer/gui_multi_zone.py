@@ -1,48 +1,75 @@
+"""10-zone galvanic-zone voltage matrix integration.
+
+This module intentionally avoids recursive import hooks.  It patches the
+voltage requirement resolver once, then patches the Tk GUI after
+``odb_clearance_analyzer.gui`` is fully imported.
+"""
+
 from __future__ import annotations
 
 import builtins
+import importlib
 import math
 import sys
 from typing import Any, Mapping
 
 from .voltage_guessing.models import AssignmentStore, VoltageAssignment
 
+
 MAX_GALVANIC_ZONES = 10
 ZONE_LABELS = tuple(f"Zone {i}" for i in range(1, MAX_GALVANIC_ZONES + 1))
 ZONE_MATRIX_KEY = "zone_to_zone_voltage_matrix"
 DEFAULT_ZONE_VOLTAGE = 1000.0
-_PATCHED = "_multi_zone_patch_v1"
-_ORIG_INIT = "_multi_zone_orig_init"
-_ORIG_SETTINGS = "_multi_zone_orig_settings"
-_ORIG_APPLY_SETTINGS = "_multi_zone_orig_apply_settings"
-_ORIG_APPLY_ZONE = "_multi_zone_orig_apply_zone"
-_IMPORT_HOOK = "_odb_multi_zone_import_hook"
+
+_GUI_PATCHED_ATTR = "_multi_zone_gui_patch_installed_v2"
+_ORIGINAL_INIT_ATTR = "_multi_zone_original_init_v2"
+_ORIGINAL_SETTINGS_ATTR = "_multi_zone_original_settings_v2"
+_ORIGINAL_APPLY_SETTINGS_ATTR = "_multi_zone_original_apply_settings_v2"
+_ORIGINAL_APPLY_ZONE_ATTR = "_multi_zone_original_apply_zone_v2"
+_IMPORT_HOOK_ATTR = "_odb_multi_zone_import_hook_v2"
+
+_REQUIREMENTS_PATCHED = False
+_REQUIREMENTS_PATCHING = False
+_HOOK_PATCHING = False
 
 
 def install_multi_zone_support() -> None:
+    """Install 10-zone resolver support and patch the GUI when available."""
+
     _patch_requirements()
+
     module = sys.modules.get("odb_clearance_analyzer.gui")
-    if module is not None:
-        _patch_gui(module)
+    if module is not None and _patch_gui(module):
         return
+
     current_import = builtins.__import__
-    if getattr(current_import, _IMPORT_HOOK, False):
+    if getattr(current_import, _IMPORT_HOOK_ATTR, False):
         return
 
     def hook(name: str, globals=None, locals=None, fromlist=(), level: int = 0):  # type: ignore[override]
+        global _HOOK_PATCHING
         result = current_import(name, globals, locals, fromlist, level)
+        if _HOOK_PATCHING:
+            return result
+
         module = sys.modules.get("odb_clearance_analyzer.gui")
         if module is not None:
-            _patch_gui(module)
-            if builtins.__import__ is hook:
+            _HOOK_PATCHING = True
+            try:
+                patched = _patch_gui(module)
+            finally:
+                _HOOK_PATCHING = False
+            if patched and builtins.__import__ is hook:
                 builtins.__import__ = current_import
         return result
 
-    setattr(hook, _IMPORT_HOOK, True)
+    setattr(hook, _IMPORT_HOOK_ATTR, True)
     builtins.__import__ = hook
 
 
 def normalize_zone(value: object) -> str:
+    """Return ``Zone 1`` ... ``Zone 10`` or ``""`` for unassigned/invalid."""
+
     text = str(value or "").strip()
     if not text:
         return ""
@@ -54,6 +81,8 @@ def normalize_zone(value: object) -> str:
 
 
 def valid_voltage(value: object, default: float = DEFAULT_ZONE_VOLTAGE) -> float:
+    """Return a positive finite voltage, otherwise ``default``."""
+
     try:
         parsed = float(value)
     except Exception:
@@ -62,54 +91,83 @@ def valid_voltage(value: object, default: float = DEFAULT_ZONE_VOLTAGE) -> float
 
 
 def default_matrix(default: float = DEFAULT_ZONE_VOLTAGE) -> dict[str, dict[str, float]]:
-    v = valid_voltage(default)
-    return {a: {b: (0.0 if a == b else v) for b in ZONE_LABELS} for a in ZONE_LABELS}
+    """Return a symmetric 10-zone matrix with 0 V diagonal."""
+
+    voltage = valid_voltage(default)
+    return {a: {b: (0.0 if a == b else voltage) for b in ZONE_LABELS} for a in ZONE_LABELS}
 
 
-def normalize_matrix(settings: Mapping[str, object] | None, default: float = DEFAULT_ZONE_VOLTAGE) -> dict[str, dict[str, float]]:
+def normalize_matrix(
+    settings: Mapping[str, object] | None,
+    default: float = DEFAULT_ZONE_VOLTAGE,
+) -> dict[str, dict[str, float]]:
+    """Normalize stored matrix settings to a full symmetric 10x10 float matrix."""
+
     settings = dict(settings or {})
-    base = valid_voltage(settings.get("galvanic_zone_voltage_v", settings.get("zone_to_zone_voltage_v", default)), default)
+    base = valid_voltage(
+        settings.get("galvanic_zone_voltage_v", settings.get("zone_to_zone_voltage_v", default)),
+        default,
+    )
     matrix = default_matrix(base)
     raw = settings.get(ZONE_MATRIX_KEY, settings.get("galvanic_zone_voltage_matrix"))
+
     if isinstance(raw, Mapping):
         for raw_a, raw_row in raw.items():
-            za = normalize_zone(raw_a)
-            if za and isinstance(raw_row, Mapping):
-                for raw_b, raw_v in raw_row.items():
-                    zb = normalize_zone(raw_b)
-                    if not zb:
+            zone_a = normalize_zone(raw_a)
+            if zone_a and isinstance(raw_row, Mapping):
+                for raw_b, raw_voltage in raw_row.items():
+                    zone_b = normalize_zone(raw_b)
+                    if not zone_b:
                         continue
-                    if za == zb:
-                        matrix[za][zb] = 0.0
+                    if zone_a == zone_b:
+                        matrix[zone_a][zone_b] = 0.0
                     else:
-                        v = valid_voltage(raw_v, base)
-                        matrix[za][zb] = matrix[zb][za] = v
+                        voltage = valid_voltage(raw_voltage, base)
+                        matrix[zone_a][zone_b] = voltage
+                        matrix[zone_b][zone_a] = voltage
                 continue
+
             key = str(raw_a)
-            for sep in ("|", ",", ";", "->", "↔"):
-                if sep in key:
-                    left, right = key.split(sep, 1)
-                    za, zb = normalize_zone(left), normalize_zone(right)
-                    if za and zb and za != zb:
-                        matrix[za][zb] = matrix[zb][za] = valid_voltage(raw_row, base)
-                    break
+            for separator in ("->", "↔", "|", ",", ";"):
+                if separator not in key:
+                    continue
+                left, right = key.split(separator, 1)
+                zone_a = normalize_zone(left)
+                zone_b = normalize_zone(right)
+                if zone_a and zone_b and zone_a != zone_b:
+                    voltage = valid_voltage(raw_row, base)
+                    matrix[zone_a][zone_b] = voltage
+                    matrix[zone_b][zone_a] = voltage
+                break
+
     elif isinstance(raw, list):
-        for r, row in enumerate(raw[:MAX_GALVANIC_ZONES]):
+        for row_index, row in enumerate(raw[:MAX_GALVANIC_ZONES]):
             if not isinstance(row, (list, tuple)):
                 continue
-            za = ZONE_LABELS[r]
-            for c, raw_v in enumerate(row[:MAX_GALVANIC_ZONES]):
-                zb = ZONE_LABELS[c]
-                matrix[za][zb] = 0.0 if za == zb else valid_voltage(raw_v, base)
-        for r, za in enumerate(ZONE_LABELS):
-            for c, zb in enumerate(ZONE_LABELS):
-                if c > r:
-                    matrix[zb][za] = matrix[za][zb]
+            zone_a = ZONE_LABELS[row_index]
+            for col_index, raw_voltage in enumerate(row[:MAX_GALVANIC_ZONES]):
+                zone_b = ZONE_LABELS[col_index]
+                matrix[zone_a][zone_b] = 0.0 if zone_a == zone_b else valid_voltage(raw_voltage, base)
+        for row_index, zone_a in enumerate(ZONE_LABELS):
+            for col_index, zone_b in enumerate(ZONE_LABELS):
+                if col_index > row_index:
+                    matrix[zone_b][zone_a] = matrix[zone_a][zone_b]
+
+    for zone in ZONE_LABELS:
+        matrix[zone][zone] = 0.0
     return matrix
 
 
-def zone_pair_voltage(zone_a: object, zone_b: object, settings: Mapping[str, object] | None, default: float = DEFAULT_ZONE_VOLTAGE) -> float:
-    za, zb = normalize_zone(zone_a), normalize_zone(zone_b)
+def zone_pair_voltage(
+    zone_a: object,
+    zone_b: object,
+    settings: Mapping[str, object] | None,
+    default: float = DEFAULT_ZONE_VOLTAGE,
+) -> float:
+    """Return required voltage between two zones from the matrix."""
+
+    za = normalize_zone(zone_a)
+    zb = normalize_zone(zone_b)
     if not za or not zb or za == zb:
         return 0.0
     return valid_voltage(normalize_matrix(settings, default)[za][zb], default)
@@ -123,144 +181,255 @@ def _settings_dict(settings: AssignmentStore | Mapping[str, object] | None) -> d
     return dict(settings or {})
 
 
-def _assignments_dict(assignments: AssignmentStore | Mapping[str, VoltageAssignment]) -> Mapping[str, VoltageAssignment]:
-    return assignments.assignments if isinstance(assignments, AssignmentStore) else assignments
+def _assignments_dict(
+    assignments: AssignmentStore | Mapping[str, VoltageAssignment],
+) -> Mapping[str, VoltageAssignment]:
+    if isinstance(assignments, AssignmentStore):
+        return assignments.assignments
+    return assignments
 
 
 def _patch_requirements() -> None:
-    from .voltage_guessing import galvanic_zones as gz
-    from .voltage_guessing import requirements as req
+    """Patch resolver/galvanic-zone modules once, with recursion protection."""
 
-    gz.GALVANIC_ZONE_CHOICES = ("", *ZONE_LABELS)
-    gz.normalize_galvanic_zone = normalize_zone
-    gz.zone_for_net = lambda assignments, net: normalize_zone(getattr(assignments.get(net), "galvanic_zone", "") if assignments.get(net) else "")
-    gz.is_inter_zone_pair = lambda assignments, a, b: bool(gz.zone_for_net(assignments, a) and gz.zone_for_net(assignments, b) and gz.zone_for_net(assignments, a) != gz.zone_for_net(assignments, b))
+    global _REQUIREMENTS_PATCHED, _REQUIREMENTS_PATCHING
+    if _REQUIREMENTS_PATCHED or _REQUIREMENTS_PATCHING:
+        return
 
-    def iter_inter_zone_measurements(measurements, assignments):
-        for rec in measurements:
-            za, zb = gz.zone_for_net(assignments, rec.net_a), gz.zone_for_net(assignments, rec.net_b)
-            if za and zb and za != zb:
-                yield rec, za, zb
+    _REQUIREMENTS_PATCHING = True
+    try:
+        gz = importlib.import_module("odb_clearance_analyzer.voltage_guessing.galvanic_zones")
+        req = importlib.import_module("odb_clearance_analyzer.voltage_guessing.requirements")
 
-    gz.iter_inter_zone_measurements = iter_inter_zone_measurements
-    req.normalize_galvanic_zone = normalize_zone
-    req._ZONE_VALUES = set(ZONE_LABELS)
+        gz.GALVANIC_ZONE_CHOICES = ("", *ZONE_LABELS)
+        gz.normalize_galvanic_zone = normalize_zone
 
-    class MultiZoneVoltageRequirementResolver:
-        def __init__(self, assignments, settings=None) -> None:
-            self._assignments = _assignments_dict(assignments)
-            self._settings = _settings_dict(settings if settings is not None else assignments if isinstance(assignments, AssignmentStore) else None)
-            self._zones_enabled = bool(self._settings.get("galvanic_zones_enabled", False)) or any(normalize_zone(getattr(a, "galvanic_zone", "")) for a in self._assignments.values())
-            self._default_zone_voltage = valid_voltage(self._settings.get("galvanic_zone_voltage_v", self._settings.get("zone_to_zone_voltage_v", DEFAULT_ZONE_VOLTAGE)))
-            self._zone_matrix = normalize_matrix(self._settings, self._default_zone_voltage)
-            self._pair_cache = {}
+        def zone_for_net(assignments, net_name):
+            assignment = assignments.get(net_name)
+            return normalize_zone(getattr(assignment, "galvanic_zone", "") if assignment else "")
 
-        @property
-        def zone_voltage_v(self) -> float:
-            return self._zone_matrix["Zone 1"]["Zone 2"]
+        def is_inter_zone_pair(assignments, net_a, net_b):
+            zone_a = zone_for_net(assignments, net_a)
+            zone_b = zone_for_net(assignments, net_b)
+            return bool(zone_a and zone_b and zone_a != zone_b)
 
-        @property
-        def zone_voltage_matrix(self) -> dict[str, dict[str, float]]:
-            return self._zone_matrix
+        def iter_inter_zone_measurements(measurements, assignments):
+            for rec in measurements:
+                zone_a = zone_for_net(assignments, rec.net_a)
+                zone_b = zone_for_net(assignments, rec.net_b)
+                if zone_a and zone_b and zone_a != zone_b:
+                    yield rec, zone_a, zone_b
 
-        def resolve(self, net_a: str, net_b: str):
-            key = (net_a, net_b)
-            if key in self._pair_cache:
-                return self._pair_cache[key]
-            local = req.resolve_existing_local_net_voltage(net_a, net_b, self._assignments)
-            za, zb = normalize_zone(local.zone_a), normalize_zone(local.zone_b)
-            if self._zones_enabled and za and zb and za != zb:
-                voltage = valid_voltage(self._zone_matrix[za][zb], self._default_zone_voltage)
-                result = req.VoltageRequirementResult(net_a, net_b, voltage, req.REQUIREMENT_SOURCE_GALVANIC_ZONE, za, zb, voltage, local.net_a_voltage_v, local.net_b_voltage_v, local.local_voltage_v, local.voltage_difference_v, "")
-            else:
-                warning = local.warning
-                if self._zones_enabled and (not za or not zb):
-                    base = getattr(req, "_INCOMPLETE_ZONE_WARNING", "Zone assignment incomplete; result uses local net voltage only.")
-                    warning = base if not warning else f"{base} {warning}"
-                result = req.VoltageRequirementResult(net_a, net_b, local.required_voltage_v, local.requirement_source, za, zb, None, local.net_a_voltage_v, local.net_b_voltage_v, local.local_voltage_v, local.voltage_difference_v, warning)
-            if len(self._pair_cache) < getattr(req, "_PAIR_CACHE_LIMIT", 200_000):
-                self._pair_cache[key] = result
-            return result
+        gz.zone_for_net = zone_for_net
+        gz.is_inter_zone_pair = is_inter_zone_pair
+        gz.iter_inter_zone_measurements = iter_inter_zone_measurements
 
-    def resolve_required_spacing_voltage(net_a, net_b, assignments, settings=None):
-        return req.VoltageRequirementResolver(assignments, settings).resolve(net_a, net_b)
+        req.normalize_galvanic_zone = normalize_zone
+        req._ZONE_VALUES = set(ZONE_LABELS)
 
-    def summarize_voltage_requirements_for_measurements(measurements, assignments, settings=None):
-        resolver = req.VoltageRequirementResolver(assignments, settings)
-        summary = {"zone_voltage_v": resolver.zone_voltage_v, "cross_zone_pairs": 0, "cross_zone_pass": 0, "cross_zone_fail": 0, "cross_zone_unknown": 0, "local_voltage_pairs": 0, "incomplete_zone_pairs": 0, "unknown_voltage_pairs": 0}
-        for i, label in enumerate(ZONE_LABELS, start=1):
-            summary[f"zone_{i}_nets"] = sum(1 for a in resolver._assignments.values() if normalize_zone(getattr(a, "galvanic_zone", "")) == label)
-        for rec in measurements or []:
-            vr = resolver.resolve(rec.net_a, rec.net_b)
-            if vr.requirement_source == req.REQUIREMENT_SOURCE_GALVANIC_ZONE:
-                summary["cross_zone_pairs"] += 1
-                status, _ = req.resolve_voltage_standard_compliance(vr.required_voltage_v, getattr(rec, "effective_max_voltage_v", None))
-                if status == req.STANDARD_STATUS_OK:
-                    summary["cross_zone_pass"] += 1
-                elif status == req.STANDARD_STATUS_NOK:
-                    summary["cross_zone_fail"] += 1
+        class MultiZoneVoltageRequirementResolver:
+            """Matrix-backed replacement for the two-zone resolver."""
+
+            def __init__(self, assignments, settings=None) -> None:
+                self._assignments = _assignments_dict(assignments)
+                self._settings = _settings_dict(
+                    settings
+                    if settings is not None
+                    else assignments
+                    if isinstance(assignments, AssignmentStore)
+                    else None
+                )
+                self._zones_enabled = bool(self._settings.get("galvanic_zones_enabled", False)) or any(
+                    normalize_zone(getattr(assignment, "galvanic_zone", ""))
+                    for assignment in self._assignments.values()
+                )
+                self._default_zone_voltage = valid_voltage(
+                    self._settings.get(
+                        "galvanic_zone_voltage_v",
+                        self._settings.get("zone_to_zone_voltage_v", DEFAULT_ZONE_VOLTAGE),
+                    )
+                )
+                self._zone_matrix = normalize_matrix(self._settings, self._default_zone_voltage)
+                self._pair_cache: dict[tuple[str, str], Any] = {}
+
+            @property
+            def zone_voltage_v(self) -> float:
+                """Backward-compatible Zone 1 ↔ Zone 2 voltage."""
+
+                return self._zone_matrix["Zone 1"]["Zone 2"]
+
+            @property
+            def zone_voltage_matrix(self) -> dict[str, dict[str, float]]:
+                return self._zone_matrix
+
+            def resolve(self, net_a: str, net_b: str):
+                key = (net_a, net_b)
+                cached = self._pair_cache.get(key)
+                if cached is not None:
+                    return cached
+
+                local = req.resolve_existing_local_net_voltage(net_a, net_b, self._assignments)
+                zone_a = normalize_zone(local.zone_a)
+                zone_b = normalize_zone(local.zone_b)
+
+                if self._zones_enabled and zone_a and zone_b and zone_a != zone_b:
+                    voltage = valid_voltage(self._zone_matrix[zone_a][zone_b], self._default_zone_voltage)
+                    result = req.VoltageRequirementResult(
+                        net_a=net_a,
+                        net_b=net_b,
+                        required_voltage_v=voltage,
+                        requirement_source=req.REQUIREMENT_SOURCE_GALVANIC_ZONE,
+                        zone_a=zone_a,
+                        zone_b=zone_b,
+                        zone_voltage_v=voltage,
+                        net_a_voltage_v=local.net_a_voltage_v,
+                        net_b_voltage_v=local.net_b_voltage_v,
+                        local_voltage_v=local.local_voltage_v,
+                        voltage_difference_v=local.voltage_difference_v,
+                        warning="",
+                    )
                 else:
-                    summary["cross_zone_unknown"] += 1
-            else:
-                summary["local_voltage_pairs"] += 1
-                if vr.warning and "incomplete" in vr.warning.lower():
-                    summary["incomplete_zone_pairs"] += 1
-                if vr.warning and "unknown" in vr.warning.lower():
-                    summary["unknown_voltage_pairs"] += 1
-        return summary
+                    warning = local.warning
+                    if self._zones_enabled and (not zone_a or not zone_b):
+                        incomplete = getattr(
+                            req,
+                            "_INCOMPLETE_ZONE_WARNING",
+                            "Zone assignment incomplete; result uses local net voltage only.",
+                        )
+                        warning = incomplete if not warning else f"{incomplete} {warning}"
+                    result = req.VoltageRequirementResult(
+                        net_a=net_a,
+                        net_b=net_b,
+                        required_voltage_v=local.required_voltage_v,
+                        requirement_source=local.requirement_source,
+                        zone_a=zone_a,
+                        zone_b=zone_b,
+                        zone_voltage_v=None,
+                        net_a_voltage_v=local.net_a_voltage_v,
+                        net_b_voltage_v=local.net_b_voltage_v,
+                        local_voltage_v=local.local_voltage_v,
+                        voltage_difference_v=local.voltage_difference_v,
+                        warning=warning,
+                    )
 
-    req.VoltageRequirementResolver = MultiZoneVoltageRequirementResolver
-    req.resolve_required_spacing_voltage = resolve_required_spacing_voltage
-    req.summarize_voltage_requirements_for_measurements = summarize_voltage_requirements_for_measurements
+                if len(self._pair_cache) < getattr(req, "_PAIR_CACHE_LIMIT", 200_000):
+                    self._pair_cache[key] = result
+                return result
+
+        def resolve_required_spacing_voltage(net_a, net_b, assignments, settings=None):
+            return req.VoltageRequirementResolver(assignments, settings).resolve(net_a, net_b)
+
+        def summarize_voltage_requirements_for_measurements(measurements, assignments, settings=None):
+            resolver = req.VoltageRequirementResolver(assignments, settings)
+            summary: dict[str, int | float | None] = {
+                "zone_voltage_v": resolver.zone_voltage_v,
+                "cross_zone_pairs": 0,
+                "cross_zone_pass": 0,
+                "cross_zone_fail": 0,
+                "cross_zone_unknown": 0,
+                "local_voltage_pairs": 0,
+                "incomplete_zone_pairs": 0,
+                "unknown_voltage_pairs": 0,
+            }
+            for index, label in enumerate(ZONE_LABELS, start=1):
+                summary[f"zone_{index}_nets"] = sum(
+                    1
+                    for assignment in resolver._assignments.values()
+                    if normalize_zone(getattr(assignment, "galvanic_zone", "")) == label
+                )
+
+            for rec in measurements or []:
+                resolved = resolver.resolve(rec.net_a, rec.net_b)
+                if resolved.requirement_source == req.REQUIREMENT_SOURCE_GALVANIC_ZONE:
+                    summary["cross_zone_pairs"] += 1
+                    status, _ = req.resolve_voltage_standard_compliance(
+                        resolved.required_voltage_v,
+                        getattr(rec, "effective_max_voltage_v", None),
+                    )
+                    if status == req.STANDARD_STATUS_OK:
+                        summary["cross_zone_pass"] += 1
+                    elif status == req.STANDARD_STATUS_NOK:
+                        summary["cross_zone_fail"] += 1
+                    else:
+                        summary["cross_zone_unknown"] += 1
+                else:
+                    summary["local_voltage_pairs"] += 1
+                    warning = str(resolved.warning or "").lower()
+                    if "incomplete" in warning:
+                        summary["incomplete_zone_pairs"] += 1
+                    if "unknown" in warning:
+                        summary["unknown_voltage_pairs"] += 1
+            return summary
+
+        req.VoltageRequirementResolver = MultiZoneVoltageRequirementResolver
+        req.resolve_required_spacing_voltage = resolve_required_spacing_voltage
+        req.summarize_voltage_requirements_for_measurements = summarize_voltage_requirements_for_measurements
+
+        for module_name in ("odb_clearance_analyzer.reports", "odb_clearance_analyzer.gui"):
+            module = sys.modules.get(module_name)
+            if module is not None:
+                setattr(module, "VoltageRequirementResolver", req.VoltageRequirementResolver)
+                setattr(module, "summarize_voltage_requirements_for_measurements", summarize_voltage_requirements_for_measurements)
+                if module_name.endswith(".gui"):
+                    setattr(module, "normalize_galvanic_zone", normalize_zone)
+
+        _REQUIREMENTS_PATCHED = True
+    finally:
+        _REQUIREMENTS_PATCHING = False
 
 
-def _patch_gui(gui_module: Any) -> None:
+def _patch_gui(gui_module: Any) -> bool:
+    """Patch ClearanceGui after its class exists.  Returns True when done."""
+
     _patch_requirements()
-    from .voltage_guessing import requirements as req
 
+    cls = getattr(gui_module, "ClearanceGui", None)
+    if cls is None:
+        return False
+    if getattr(cls, _GUI_PATCHED_ATTR, False):
+        return True
+
+    req = importlib.import_module("odb_clearance_analyzer.voltage_guessing.requirements")
     gui_module.normalize_galvanic_zone = normalize_zone
     gui_module.VoltageRequirementResolver = req.VoltageRequirementResolver
     gui_module.summarize_voltage_requirements_for_measurements = req.summarize_voltage_requirements_for_measurements
 
-    cls = getattr(gui_module, "ClearanceGui", None)
-    if cls is None or getattr(cls, _PATCHED, False):
-        return
-
-    if not hasattr(cls, _ORIG_SETTINGS):
-        setattr(cls, _ORIG_SETTINGS, cls._current_voltage_guessing_settings)
+    if not hasattr(cls, _ORIGINAL_SETTINGS_ATTR):
+        setattr(cls, _ORIGINAL_SETTINGS_ATTR, cls._current_voltage_guessing_settings)
 
         def current_settings(self):
-            settings = dict(getattr(cls, _ORIG_SETTINGS)(self))
+            settings = dict(getattr(cls, _ORIGINAL_SETTINGS_ATTR)(self))
             settings.update(_settings_from_gui(self))
             return settings
 
         cls._current_voltage_guessing_settings = current_settings
 
-    if not hasattr(cls, _ORIG_APPLY_SETTINGS):
-        setattr(cls, _ORIG_APPLY_SETTINGS, cls._apply_voltage_guessing_settings)
+    if not hasattr(cls, _ORIGINAL_APPLY_SETTINGS_ATTR):
+        setattr(cls, _ORIGINAL_APPLY_SETTINGS_ATTR, cls._apply_voltage_guessing_settings)
 
         def apply_settings(self, settings, *args, **kwargs):
-            getattr(cls, _ORIG_APPLY_SETTINGS)(self, settings, *args, **kwargs)
+            getattr(cls, _ORIGINAL_APPLY_SETTINGS_ATTR)(self, settings, *args, **kwargs)
             _ensure_vars(gui_module, self)
             _load_vars(self, dict(settings or {}))
             _refresh_zone_comboboxes(gui_module, self)
 
         cls._apply_voltage_guessing_settings = apply_settings
 
-    if not hasattr(cls, _ORIG_APPLY_ZONE):
-        setattr(cls, _ORIG_APPLY_ZONE, getattr(cls, "_apply_zone_to_zone_voltage_setting", None))
+    if not hasattr(cls, _ORIGINAL_APPLY_ZONE_ATTR):
+        setattr(cls, _ORIGINAL_APPLY_ZONE_ATTR, getattr(cls, "_apply_zone_to_zone_voltage_setting", None))
         cls._apply_zone_to_zone_voltage_setting = lambda self: _apply_matrix(gui_module, self)
 
-    if not hasattr(cls, _ORIG_INIT):
-        setattr(cls, _ORIG_INIT, cls.__init__)
+    if not hasattr(cls, _ORIGINAL_INIT_ATTR):
+        setattr(cls, _ORIGINAL_INIT_ATTR, cls.__init__)
 
         def init(self, *args, **kwargs):
-            getattr(cls, _ORIG_INIT)(self, *args, **kwargs)
+            getattr(cls, _ORIGINAL_INIT_ATTR)(self, *args, **kwargs)
             _install_tab(gui_module, self)
 
         cls.__init__ = init
 
-    setattr(cls, _PATCHED, True)
+    setattr(cls, _GUI_PATCHED_ATTR, True)
+    return True
 
 
 def _legacy_voltage(gui: Any) -> float:
@@ -275,47 +444,61 @@ def _ensure_vars(gui_module: Any, gui: Any) -> dict[tuple[str, str], Any]:
         gui.voltage_zone_matrix_vars = {}
     vars_map = gui.voltage_zone_matrix_vars
     matrix = normalize_matrix(getattr(getattr(gui, "voltage_store", None), "settings", {}) or {}, _legacy_voltage(gui))
-    for a in ZONE_LABELS:
-        for b in ZONE_LABELS:
-            key = (a, b)
+    for zone_a in ZONE_LABELS:
+        for zone_b in ZONE_LABELS:
+            key = (zone_a, zone_b)
             if key not in vars_map:
-                vars_map[key] = gui_module.StringVar(value="0" if a == b else f"{matrix[a][b]:g}")
+                vars_map[key] = gui_module.StringVar(
+                    value="0" if zone_a == zone_b else f"{matrix[zone_a][zone_b]:g}"
+                )
     return vars_map
 
 
 def _settings_from_gui(gui: Any) -> dict[str, object]:
     vars_map = getattr(gui, "voltage_zone_matrix_vars", None)
     previous = normalize_matrix(getattr(getattr(gui, "voltage_store", None), "settings", {}) or {}, _legacy_voltage(gui))
-    if vars_map:
+    if not vars_map:
+        matrix = previous
+    else:
         matrix = default_matrix(_legacy_voltage(gui))
-        for a in ZONE_LABELS:
-            for b in ZONE_LABELS:
-                matrix[a][b] = 0.0 if a == b else valid_voltage(vars_map[(a, b)].get(), previous[a][b])
-        for r, a in enumerate(ZONE_LABELS):
-            for c, b in enumerate(ZONE_LABELS):
-                if c <= r:
+        for zone_a in ZONE_LABELS:
+            for zone_b in ZONE_LABELS:
+                if zone_a == zone_b:
+                    matrix[zone_a][zone_b] = 0.0
+                else:
+                    matrix[zone_a][zone_b] = valid_voltage(vars_map[(zone_a, zone_b)].get(), previous[zone_a][zone_b])
+
+        for row_index, zone_a in enumerate(ZONE_LABELS):
+            for col_index, zone_b in enumerate(ZONE_LABELS):
+                if col_index <= row_index:
                     continue
-                ab, ba = matrix[a][b], matrix[b][a]
-                chosen = ba if ab != ba and ab == previous[a][b] and ba != previous[b][a] else ab
-                matrix[a][b] = matrix[b][a] = chosen
+                value = matrix[zone_a][zone_b]
+                matrix[zone_b][zone_a] = value
                 try:
-                    vars_map[(a, b)].set(f"{chosen:g}")
-                    vars_map[(b, a)].set(f"{chosen:g}")
+                    vars_map[(zone_a, zone_b)].set(f"{value:g}")
+                    vars_map[(zone_b, zone_a)].set(f"{value:g}")
                 except Exception:
                     pass
-    else:
-        matrix = previous
+
     zone12 = matrix["Zone 1"]["Zone 2"]
-    return {"galvanic_zones_supported": list(ZONE_LABELS), "galvanic_zone_count": MAX_GALVANIC_ZONES, "galvanic_zones_enabled": True, ZONE_MATRIX_KEY: matrix, "galvanic_zone_voltage_v": zone12, "zone_to_zone_voltage_v": zone12}
+    return {
+        "galvanic_zones_supported": list(ZONE_LABELS),
+        "galvanic_zone_count": MAX_GALVANIC_ZONES,
+        "galvanic_zones_enabled": True,
+        ZONE_MATRIX_KEY: matrix,
+        "galvanic_zone_voltage_v": zone12,
+        "zone_to_zone_voltage_v": zone12,
+    }
 
 
 def _load_vars(gui: Any, settings: Mapping[str, object]) -> None:
     vars_map = getattr(gui, "voltage_zone_matrix_vars", {})
     matrix = normalize_matrix(settings, _legacy_voltage(gui))
-    for a in ZONE_LABELS:
-        for b in ZONE_LABELS:
-            if (a, b) in vars_map:
-                vars_map[(a, b)].set("0" if a == b else f"{matrix[a][b]:g}")
+    for zone_a in ZONE_LABELS:
+        for zone_b in ZONE_LABELS:
+            var = vars_map.get((zone_a, zone_b))
+            if var is not None:
+                var.set("0" if zone_a == zone_b else f"{matrix[zone_a][zone_b]:g}")
     try:
         gui.voltage_galvanic_zone_voltage.set(matrix["Zone 1"]["Zone 2"])
     except Exception:
@@ -350,8 +533,10 @@ def _install_tab(gui_module: Any, gui: Any) -> None:
     notebook = getattr(gui, "voltage_notebook", None)
     if notebook is None:
         return
+
     _ensure_vars(gui_module, gui)
     _refresh_zone_comboboxes(gui_module, gui)
+
     if not getattr(gui, "_zones_tab_added", False):
         tab = gui_module.ttk.Frame(notebook, padding=8, style="Card.TFrame")
         _build_tab(gui_module, gui, tab)
@@ -361,6 +546,7 @@ def _install_tab(gui_module: Any, gui: Any) -> None:
             notebook.add(tab, text="Zones")
         gui.voltage_zones_tab = tab
         gui._zones_tab_added = True
+
     _hide_old_zone_controls(gui)
 
 
@@ -368,50 +554,83 @@ def _build_tab(gui_module: Any, gui: Any, parent: Any) -> None:
     ttk = gui_module.ttk
     left = getattr(gui_module, "LEFT", "left")
     both = getattr(gui_module, "BOTH", "both")
-    x = getattr(gui_module, "X", "x")
-    ttk.Label(parent, text="Define voltage between galvanic zones. Assignments can use Zone 1 through Zone 10; same-zone pairs use net-to-net voltage difference.", style="Muted.TLabel", wraplength=1100, justify="left").pack(anchor="w", fill=x, pady=(0, 10))
+    x_fill = getattr(gui_module, "X", "x")
+
+    ttk.Label(
+        parent,
+        text=(
+            "Define required voltage between galvanic zones. Assignments can use Zone 1 through "
+            "Zone 10; same-zone pairs still use the local net-to-net voltage difference."
+        ),
+        style="Muted.TLabel",
+        wraplength=1100,
+        justify="left",
+    ).pack(anchor="w", fill=x_fill, pady=(0, 10))
+
     row = ttk.Frame(parent, style="Card.TFrame")
-    row.pack(anchor="w", fill=x, pady=(0, 8))
+    row.pack(anchor="w", fill=x_fill, pady=(0, 8))
     ttk.Label(row, text="Supported zones: Zone 1 … Zone 10").pack(side=left, padx=(0, 18))
-    ttk.Button(row, text="Apply zone voltage matrix", style="Primary.TButton", command=lambda: _apply_matrix(gui_module, gui)).pack(side=left, padx=(0, 8))
-    ttk.Button(row, text="Reset matrix to 1000 V", command=lambda: _reset_matrix(gui_module, gui, DEFAULT_ZONE_VOLTAGE)).pack(side=left, padx=(0, 8))
-    ttk.Button(row, text="Use Zone 1↔2 value for all", command=lambda: _reset_matrix(gui_module, gui, _legacy_voltage(gui))).pack(side=left, padx=(0, 8))
+    ttk.Button(
+        row,
+        text="Apply zone voltage matrix",
+        style="Primary.TButton",
+        command=lambda: _apply_matrix(gui_module, gui),
+    ).pack(side=left, padx=(0, 8))
+    ttk.Button(
+        row,
+        text="Reset matrix to 1000 V",
+        command=lambda: _reset_matrix(gui_module, gui, DEFAULT_ZONE_VOLTAGE),
+    ).pack(side=left, padx=(0, 8))
+    ttk.Button(
+        row,
+        text="Use Zone 1↔2 value for all",
+        command=lambda: _reset_matrix(gui_module, gui, _legacy_voltage(gui)),
+    ).pack(side=left, padx=(0, 8))
+
     table = ttk.Frame(parent, style="Card.TFrame")
     table.pack(anchor="nw", fill=both, expand=True)
     gui.voltage_zone_matrix_table = table
+
     ttk.Label(table, text="V required", style="CardSubtitle.TLabel").grid(row=0, column=0, padx=4, pady=4, sticky="ew")
-    for c, zone in enumerate(ZONE_LABELS, start=1):
-        ttk.Label(table, text=zone, style="CardSubtitle.TLabel").grid(row=0, column=c, padx=2, pady=4, sticky="ew")
-        table.columnconfigure(c, weight=1)
+    for col, zone in enumerate(ZONE_LABELS, start=1):
+        ttk.Label(table, text=zone, style="CardSubtitle.TLabel").grid(row=0, column=col, padx=2, pady=4, sticky="ew")
+        table.columnconfigure(col, weight=1)
+
     vars_map = _ensure_vars(gui_module, gui)
-    for r, a in enumerate(ZONE_LABELS, start=1):
-        ttk.Label(table, text=a, style="CardSubtitle.TLabel").grid(row=r, column=0, padx=4, pady=2, sticky="ew")
-        for c, b in enumerate(ZONE_LABELS, start=1):
-            entry = ttk.Entry(table, textvariable=vars_map[(a, b)], width=8, justify="center")
-            entry.grid(row=r, column=c, padx=2, pady=2, sticky="ew")
-            if a == b:
+    for row_index, zone_a in enumerate(ZONE_LABELS, start=1):
+        ttk.Label(table, text=zone_a, style="CardSubtitle.TLabel").grid(row=row_index, column=0, padx=4, pady=2, sticky="ew")
+        for col_index, zone_b in enumerate(ZONE_LABELS, start=1):
+            entry = ttk.Entry(table, textvariable=vars_map[(zone_a, zone_b)], width=8, justify="center")
+            entry.grid(row=row_index, column=col_index, padx=2, pady=2, sticky="ew")
+            if zone_a == zone_b:
                 entry.configure(state="disabled")
             else:
-                entry.bind("<FocusOut>", lambda _e, za=a, zb=b: _mirror(gui, za, zb))
-                entry.bind("<Return>", lambda _e, za=a, zb=b: (_mirror(gui, za, zb), "break")[-1])
-    ttk.Label(parent, text="The matrix is symmetric; diagonal cells are fixed at 0 V.", style="Muted.TLabel", wraplength=1100).pack(anchor="w", fill=x, pady=(10, 0))
+                entry.bind("<FocusOut>", lambda _event, a=zone_a, b=zone_b: _mirror(gui, a, b))
+                entry.bind("<Return>", lambda _event, a=zone_a, b=zone_b: (_mirror(gui, a, b), "break")[-1])
+
+    ttk.Label(
+        parent,
+        text="The matrix is symmetric; diagonal cells are fixed at 0 V. Values are saved in the project voltage-assignment settings.",
+        style="Muted.TLabel",
+        wraplength=1100,
+    ).pack(anchor="w", fill=x_fill, pady=(10, 0))
 
 
-def _mirror(gui: Any, a: str, b: str) -> None:
+def _mirror(gui: Any, zone_a: str, zone_b: str) -> None:
     vars_map = getattr(gui, "voltage_zone_matrix_vars", {})
-    if (a, b) not in vars_map or (b, a) not in vars_map:
+    if (zone_a, zone_b) not in vars_map or (zone_b, zone_a) not in vars_map:
         return
-    v = valid_voltage(vars_map[(a, b)].get(), _legacy_voltage(gui))
-    vars_map[(a, b)].set(f"{v:g}")
-    vars_map[(b, a)].set(f"{v:g}")
+    value = valid_voltage(vars_map[(zone_a, zone_b)].get(), _legacy_voltage(gui))
+    vars_map[(zone_a, zone_b)].set(f"{value:g}")
+    vars_map[(zone_b, zone_a)].set(f"{value:g}")
 
 
 def _reset_matrix(gui_module: Any, gui: Any, voltage: float) -> None:
     vars_map = _ensure_vars(gui_module, gui)
-    v = valid_voltage(voltage)
-    for a in ZONE_LABELS:
-        for b in ZONE_LABELS:
-            vars_map[(a, b)].set("0" if a == b else f"{v:g}")
+    value = valid_voltage(voltage)
+    for zone_a in ZONE_LABELS:
+        for zone_b in ZONE_LABELS:
+            vars_map[(zone_a, zone_b)].set("0" if zone_a == zone_b else f"{value:g}")
     _apply_matrix(gui_module, gui)
 
 
@@ -422,15 +641,15 @@ def _refresh_zone_comboboxes(gui_module: Any, gui: Any) -> None:
     values_plain = ("", *ZONE_LABELS)
 
     def walk(widget):
-        for child in getattr(widget, "winfo_children")():
+        try:
+            children = list(widget.winfo_children())
+        except Exception:
+            children = []
+        for child in children:
             yield child
             yield from walk(child)
 
-    try:
-        widgets = list(walk(gui))
-    except Exception:
-        return
-    for widget in widgets:
+    for widget in list(walk(gui)):
         if not isinstance(widget, ttk.Combobox):
             continue
         try:
@@ -442,7 +661,7 @@ def _refresh_zone_comboboxes(gui_module: Any, gui: Any) -> None:
 
 
 def _hide_old_zone_controls(gui: Any) -> None:
-    def text(widget):
+    def widget_text(widget):
         try:
             return str(widget.cget("text") or "")
         except Exception:
@@ -458,7 +677,7 @@ def _hide_old_zone_controls(gui: Any) -> None:
             yield from walk(child)
 
     for widget in list(walk(gui)):
-        label = text(widget)
+        label = widget_text(widget)
         if label == "Zone 1 ↔ Zone 2 working voltage, V":
             try:
                 widget.master.destroy()
@@ -472,5 +691,12 @@ def _hide_old_zone_controls(gui: Any) -> None:
                 row = -1
             if parent is not None and row >= 0:
                 for target_row in (row, row + 1, row + 2):
-                    for sibling in parent.grid_slaves(row=target_row):
-                        sibling.destroy()
+                    try:
+                        slaves = list(parent.grid_slaves(row=target_row))
+                    except Exception:
+                        slaves = []
+                    for sibling in slaves:
+                        try:
+                            sibling.destroy()
+                        except Exception:
+                            pass
