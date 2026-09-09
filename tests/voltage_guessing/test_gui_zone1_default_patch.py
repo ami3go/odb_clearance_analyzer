@@ -73,6 +73,7 @@ def test_main_action_buttons_are_in_header_not_input_row(root):
     assert getattr(gui, "_header_control_row", None) is not None
     assert gui.run_button.master is gui._header_control_row
     assert gui.stop_button.master is gui._header_control_row
+    assert str(gui.run_button.cget("style")) == "HeaderRun.TButton"
 
     texts = _widget_texts(gui)
     for label in ("Run analysis", "Stop", "Open output", "Geometry viewer"):
