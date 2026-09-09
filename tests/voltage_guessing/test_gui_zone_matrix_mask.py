@@ -63,3 +63,34 @@ def test_zone_matrix_top_duplicate_cells_are_masked(root):
     assert settings[ZONE_MATRIX_KEY]["Zone 1"]["Zone 4"] == 640.0
     assert settings[ZONE_MATRIX_KEY]["Zone 4"]["Zone 1"] == 640.0
     assert len(settings[ZONE_MATRIX_KEY]) == len(ZONE_LABELS)
+
+
+def test_report_resolver_uses_visible_lower_triangle_zone_matrix_value(root):
+    from odb_clearance_analyzer.gui import ClearanceGui
+    from odb_clearance_analyzer.gui_multi_zone import ZONE_MATRIX_KEY
+    from odb_clearance_analyzer.voltage_guessing import load_rule_pack, review_service
+    from odb_clearance_analyzer.voltage_guessing.requirements import (
+        REQUIREMENT_SOURCE_GALVANIC_ZONE,
+        VoltageRequirementResolver,
+    )
+
+    gui = ClearanceGui(root)
+    root.update_idletasks()
+
+    # The top cell is masked in the UI. The user-visible editable cell is the
+    # lower-triangle mirror, and this is the value reports must receive.
+    gui.voltage_zone_matrix_vars[("Zone 4", "Zone 1")].set("640")
+    settings = gui._current_voltage_guessing_settings()
+    assert settings[ZONE_MATRIX_KEY]["Zone 1"]["Zone 4"] == 640.0
+    assert settings[ZONE_MATRIX_KEY]["Zone 4"]["Zone 1"] == 640.0
+
+    pack = load_rule_pack()
+    review_service.run_auto_detect(gui.voltage_store, ["NET_A", "NET_B"], pack)
+    gui.voltage_store.assignments["NET_A"].galvanic_zone = "Zone 1"
+    gui.voltage_store.assignments["NET_B"].galvanic_zone = "Zone 4"
+
+    requirement = VoltageRequirementResolver(gui.voltage_store.assignments, settings).resolve("NET_A", "NET_B")
+    assert requirement.requirement_source == REQUIREMENT_SOURCE_GALVANIC_ZONE
+    assert requirement.zone_a == "Zone 1"
+    assert requirement.zone_b == "Zone 4"
+    assert requirement.required_voltage_v == 640.0
