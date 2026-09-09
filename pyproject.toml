@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "odb-clearance-analyzer"
-version = "0.4.38"
+version = "0.4.39"
 description = "ODB++ net-to-net copper clearance analyzer with Tkinter GUI and report export"
 readme = "README.md"
 requires-python = ">=3.10"
