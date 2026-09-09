@@ -54,14 +54,6 @@ def _patch_gui_module(gui_module: Any) -> None:
     if cls is None or getattr(cls, _PATCHED_ATTR, False):
         return
 
-    # Newer source trees may already contain the native implementation. In that
-    # case do not wrap methods or add a duplicate control.
-    if hasattr(cls, "_apply_default_all_nets_zone1_setting") and hasattr(
-        cls, "_apply_default_zone1_to_unassigned_assignments"
-    ):
-        setattr(cls, _PATCHED_ATTR, True)
-        return
-
     def default_enabled(self: Any) -> bool:
         var = getattr(self, "voltage_default_all_nets_zone1", None)
         try:
