@@ -47,7 +47,7 @@ def test_default_zone1_checkbox_visible_and_applies_only_to_blank_zones(root, tm
     gui = ClearanceGui(root)
     gui.output_dir.set(str(tmp_path))
 
-    assert "Assign all unassigned nets to Zone 1 by default" in _widget_texts(gui)
+    assert "Assign all unassigned nets to Zone 1 automatically" in _widget_texts(gui)
     assert hasattr(gui, "voltage_default_all_nets_zone1")
     assert hasattr(gui, "_apply_default_all_nets_zone1_setting")
 
@@ -62,3 +62,18 @@ def test_default_zone1_checkbox_visible_and_applies_only_to_blank_zones(root, tm
     assert gui.voltage_store.assignments["GND"].galvanic_zone == GALVANIC_ZONE_1
     assert gui.voltage_store.assignments["3V3"].galvanic_zone == GALVANIC_ZONE_1
     assert gui.voltage_store.assignments["ISO_SIG"].galvanic_zone == GALVANIC_ZONE_2
+
+
+def test_main_action_buttons_are_in_header_not_input_row(root):
+    from odb_clearance_analyzer.gui import ClearanceGui
+
+    gui = ClearanceGui(root)
+
+    assert getattr(gui, "_main_control_buttons_in_header", False) is True
+    assert getattr(gui, "_header_control_row", None) is not None
+    assert gui.run_button.master is gui._header_control_row
+    assert gui.stop_button.master is gui._header_control_row
+
+    texts = _widget_texts(gui)
+    for label in ("Run analysis", "Stop", "Open output", "Geometry viewer"):
+        assert texts.count(label) == 1
