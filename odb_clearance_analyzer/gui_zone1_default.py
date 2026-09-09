@@ -11,13 +11,21 @@ _PATCHED_ATTR = "_zone1_default_gui_patch_installed"
 _IMPORT_HOOK_ATTR = "_odb_zone1_default_import_hook"
 
 
-def install_zone1_default_gui_patch() -> None:
-    """Install a one-shot import hook that patches ``odb_clearance_analyzer.gui``.
+def main() -> None:
+    """Launch the GUI after applying the Zone 1 default checkbox patch.
 
-    The GUI entry point imports the package first and ``odb_clearance_analyzer.gui``
-    second, so this hook patches ``ClearanceGui`` after the submodule has loaded
-    but before the entry-point ``main()`` creates the first window.
+    This entry point is used by the console script and launchers so the
+    checkbox does not depend only on import-hook timing.
     """
+
+    from . import gui as gui_module
+
+    _patch_gui_module(gui_module)
+    gui_module.main()
+
+
+def install_zone1_default_gui_patch() -> None:
+    """Install a one-shot import hook that patches ``odb_clearance_analyzer.gui``."""
 
     module = sys.modules.get("odb_clearance_analyzer.gui")
     if module is not None:
@@ -48,7 +56,9 @@ def _patch_gui_module(gui_module: Any) -> None:
 
     # Newer source trees may already contain the native implementation. In that
     # case do not wrap methods or add a duplicate control.
-    if hasattr(cls, "_apply_default_all_nets_zone1_setting") and hasattr(cls, "_apply_default_zone1_to_unassigned_assignments"):
+    if hasattr(cls, "_apply_default_all_nets_zone1_setting") and hasattr(
+        cls, "_apply_default_zone1_to_unassigned_assignments"
+    ):
         setattr(cls, _PATCHED_ATTR, True)
         return
 
@@ -101,7 +111,9 @@ def _patch_gui_module(gui_module: Any) -> None:
                     f"Voltage Guessing: default Zone 1 is enabled; assigned Zone 1 to {changed} net(s) with blank galvanic zone."
                 )
             else:
-                self._append_log("Voltage Guessing: default Zone 1 assignment is disabled; existing zones were not changed.")
+                self._append_log(
+                    "Voltage Guessing: default Zone 1 assignment is disabled; existing zones were not changed."
+                )
 
     def coerce_bool(value: object) -> bool:
         if isinstance(value, str):
@@ -131,10 +143,14 @@ def _patch_gui_module(gui_module: Any) -> None:
 
     original_apply_settings = cls._apply_voltage_guessing_settings
 
-    def patched_apply_settings(self: Any, settings: dict[str, object] | None, *args: Any, **kwargs: Any) -> None:
+    def patched_apply_settings(
+        self: Any, settings: dict[str, object] | None, *args: Any, **kwargs: Any
+    ) -> None:
         original_apply_settings(self, settings, *args, **kwargs)
         settings = dict(settings or {})
-        raw = settings.get("default_all_nets_to_zone_1", settings.get("assign_all_nets_to_zone_1", None))
+        raw = settings.get(
+            "default_all_nets_to_zone_1", settings.get("assign_all_nets_to_zone_1", None)
+        )
         if raw is not None and hasattr(self, "voltage_default_all_nets_zone1"):
             self.voltage_default_all_nets_zone1.set(coerce_bool(raw))
 
@@ -156,7 +172,11 @@ def _patch_gui_module(gui_module: Any) -> None:
     ):
         original = getattr(cls, method_name, None)
         if callable(original):
-            setattr(cls, method_name, _wrap_assignment_mutator(original, apply_default_zone1, save_after_zone_change))
+            setattr(
+                cls,
+                method_name,
+                _wrap_assignment_mutator(original, apply_default_zone1, save_after_zone_change),
+            )
 
     setattr(cls, _PATCHED_ATTR, True)
 
@@ -205,7 +225,12 @@ def _add_checkbox_to_overview(gui_module: Any, gui: Any) -> None:
         )
     else:
         card = ttk.Frame(overview_tab)
-    card.pack(fill=x_fill, pady=(0, 8))
+
+    children = list(overview_tab.winfo_children())
+    pack_options: dict[str, Any] = {"fill": x_fill, "pady": (0, 8)}
+    if len(children) >= 3:
+        pack_options["before"] = children[2]
+    card.pack(**pack_options)
 
     row = ttk.Frame(card, style="Card.TFrame")
     row.pack(anchor="w", fill=x_fill, pady=(4, 0))
@@ -217,7 +242,10 @@ def _add_checkbox_to_overview(gui_module: Any, gui: Any) -> None:
     ).pack(side=left, padx=(0, 10))
     ttk.Label(
         row,
-        text="When enabled, Auto-detect/import fills blank galvanic-zone fields with Zone 1. Existing Zone 2/manual choices are preserved.",
+        text=(
+            "When enabled, Auto-detect/import fills blank galvanic-zone fields with Zone 1. "
+            "Existing Zone 2/manual choices are preserved."
+        ),
         style="Muted.TLabel",
         wraplength=900,
     ).pack(side=left)
