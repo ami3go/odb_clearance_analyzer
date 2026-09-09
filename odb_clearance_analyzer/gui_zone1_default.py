@@ -7,7 +7,7 @@ import sys
 from typing import Any, Callable
 
 
-_PATCHED_ATTR = "_zone1_default_gui_patch_installed_v3"
+_PATCHED_ATTR = "_zone1_default_gui_patch_installed_v4"
 _IMPORT_HOOK_ATTR = "_odb_zone1_default_import_hook"
 _ORIGINAL_INIT_ATTR = "_zone1_default_original_init"
 _ORIGINAL_CREATE_TAB_ATTR = "_zone1_default_original_create_tab"
@@ -18,6 +18,11 @@ _CHECKBOX_TEXT = "Assign all unassigned nets to Zone 1 automatically"
 _SETTING_KEY = "default_all_nets_to_zone_1"
 _HEADER_ACTION_TEXTS = {"Run analysis", "Stop", "Open output", "Geometry viewer"}
 _HEADER_RUN_STYLE = "HeaderRun.TButton"
+_RUN_TEXT = "Run analysis"
+_STOP_TEXT = "Stop"
+_MODE_IDLE = "idle"
+_MODE_RUNNING = "running"
+_MODE_STOPPING = "stopping"
 
 
 def main() -> None:
@@ -399,17 +404,115 @@ def _configure_header_button_styles(gui_module: Any, gui: Any) -> None:
     )
 
 
+def _set_run_stop_button_mode(gui: Any, mode: str) -> None:
+    """Render the one visible run/stop button for the requested analysis state."""
+
+    button = getattr(gui, "run_stop_button", None)
+    if button is None:
+        return
+    if mode not in {_MODE_IDLE, _MODE_RUNNING, _MODE_STOPPING}:
+        mode = _MODE_IDLE
+    gui._run_stop_mode = mode
+
+    if mode == _MODE_IDLE:
+        button.configure(
+            text=_RUN_TEXT,
+            style=_HEADER_RUN_STYLE,
+            command=gui._start_analysis,
+            state="normal",
+        )
+    elif mode == _MODE_RUNNING:
+        button.configure(
+            text=_STOP_TEXT,
+            style="Danger.TButton",
+            command=gui._stop_analysis,
+            state="normal",
+        )
+    else:
+        button.configure(
+            text=_STOP_TEXT,
+            style="Danger.TButton",
+            command=gui._stop_analysis,
+            state="disabled",
+        )
+
+
+class _RunStopButtonProxy:
+    """Compatibility facade for old two-button GUI state transitions.
+
+    The original GUI expects separate ``run_button`` and ``stop_button``
+    objects.  The header now has one visible button.  This proxy converts the
+    old state changes into the correct visible state:
+
+    - ``run_button.configure(state='disabled')`` -> visible button becomes Stop.
+    - ``stop_button.configure(state='normal')`` -> visible button remains Stop.
+    - ``stop_button.configure(state='disabled')`` while running -> disabled Stop.
+    - ``run_button.configure(state='normal')`` -> visible button becomes Run.
+    """
+
+    def __init__(self, gui: Any, button: Any, role: str):
+        self._gui = gui
+        self._button = button
+        self._role = role
+
+    @property
+    def master(self) -> Any:
+        return self._button.master
+
+    def configure(self, *args: Any, **kwargs: Any) -> Any:
+        state = kwargs.pop("state", None)
+        if state is not None:
+            self._apply_state(str(state))
+        if kwargs:
+            return self._button.configure(*args, **kwargs)
+        if args:
+            return self._button.configure(*args)
+        return None
+
+    config = configure
+
+    def cget(self, option: str) -> Any:
+        if option == "state":
+            mode = getattr(self._gui, "_run_stop_mode", _MODE_IDLE)
+            if self._role == "run":
+                return "normal" if mode == _MODE_IDLE else "disabled"
+            return "normal" if mode == _MODE_RUNNING else "disabled"
+        return self._button.cget(option)
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._button, name)
+
+    def _apply_state(self, state: str) -> None:
+        mode = getattr(self._gui, "_run_stop_mode", _MODE_IDLE)
+        if self._role == "run":
+            if state == "disabled":
+                _set_run_stop_button_mode(self._gui, _MODE_RUNNING)
+            elif state == "normal":
+                _set_run_stop_button_mode(self._gui, _MODE_IDLE)
+            else:
+                self._button.configure(state=state)
+            return
+
+        if state == "normal":
+            _set_run_stop_button_mode(self._gui, _MODE_RUNNING)
+        elif state == "disabled":
+            if mode == _MODE_RUNNING:
+                _set_run_stop_button_mode(self._gui, _MODE_STOPPING)
+            elif mode == _MODE_STOPPING:
+                self._button.configure(state="disabled")
+            else:
+                _set_run_stop_button_mode(self._gui, _MODE_IDLE)
+        else:
+            self._button.configure(state=state)
+
+
 def _move_main_controls_to_header(gui_module: Any, gui: Any) -> None:
-    """Move Run/Stop/Open/Geometry actions from the options row to the app header."""
+    """Move analysis actions to the app header and combine Run/Stop into one button."""
 
     if getattr(gui, "_main_control_buttons_in_header", False):
-        # Existing header controls may have been created by an older install;
-        # refresh the Run button style so it remains visible on the app bar.
         _configure_header_button_styles(gui_module, gui)
-        try:
-            gui.run_button.configure(style=_HEADER_RUN_STYLE)
-        except Exception:
-            pass
+        if getattr(gui, "run_stop_button", None) is not None:
+            _set_run_stop_button_mode(gui, getattr(gui, "_run_stop_mode", _MODE_IDLE))
         return
 
     progress = getattr(gui, "progress", None)
@@ -447,29 +550,19 @@ def _move_main_controls_to_header(gui_module: Any, gui: Any) -> None:
     except Exception:
         controls.pack(side=left, padx=(18, 18), fill=x_fill)
 
-    gui.run_button = ttk.Button(
+    combined = ttk.Button(
         controls,
-        text="Run analysis",
+        text=_RUN_TEXT,
         style=_HEADER_RUN_STYLE,
         command=gui._start_analysis,
     )
-    gui.run_button.pack(side=left, padx=(0, 6))
-    try:
-        gui.run_button.configure(state=run_state)
-    except Exception:
-        pass
+    combined.pack(side=left, padx=(0, 6))
+    gui.run_stop_button = combined
+    gui.run_button = _RunStopButtonProxy(gui, combined, "run")
+    gui.stop_button = _RunStopButtonProxy(gui, combined, "stop")
 
-    gui.stop_button = ttk.Button(
-        controls,
-        text="Stop",
-        style="Danger.TButton",
-        command=gui._stop_analysis,
-    )
-    gui.stop_button.pack(side=left, padx=(0, 6))
-    try:
-        gui.stop_button.configure(state=stop_state)
-    except Exception:
-        pass
+    initial_mode = _MODE_RUNNING if stop_state == "normal" or run_state == "disabled" else _MODE_IDLE
+    _set_run_stop_button_mode(gui, initial_mode)
 
     ttk.Button(
         controls,
