@@ -1,4 +1,4 @@
-"""Visible GUI integration for default Zone 1 voltage-assignment workflow."""
+"""Visible GUI integration for default Zone 1 and header action controls."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ import sys
 from typing import Any, Callable
 
 
-_PATCHED_ATTR = "_zone1_default_gui_patch_installed_v2"
+_PATCHED_ATTR = "_zone1_default_gui_patch_installed_v3"
 _IMPORT_HOOK_ATTR = "_odb_zone1_default_import_hook"
 _ORIGINAL_INIT_ATTR = "_zone1_default_original_init"
 _ORIGINAL_CREATE_TAB_ATTR = "_zone1_default_original_create_tab"
@@ -16,10 +16,11 @@ _ORIGINAL_APPLY_SETTINGS_ATTR = "_zone1_default_original_apply_settings"
 _ORIGINAL_MUTATOR_PREFIX = "_zone1_default_original_"
 _CHECKBOX_TEXT = "Assign all unassigned nets to Zone 1 automatically"
 _SETTING_KEY = "default_all_nets_to_zone_1"
+_HEADER_ACTION_TEXTS = {"Run analysis", "Stop", "Open output", "Geometry viewer"}
 
 
 def main() -> None:
-    """Launch the GUI after applying the visible Zone 1 checkbox integration."""
+    """Launch the GUI after applying the visible GUI integrations."""
 
     from . import gui as gui_module
 
@@ -53,13 +54,7 @@ def install_zone1_default_gui_patch() -> None:
 
 
 def _patch_gui_module(gui_module: Any) -> None:
-    """Install a robust runtime patch on ClearanceGui.
-
-    The previous implementation only wrapped tab creation. That was too fragile:
-    if helper methods already existed, the patch could return before the visible
-    control was inserted. This version also runs after ``ClearanceGui.__init__``
-    and places the checkbox directly inside the already-visible workflow card.
-    """
+    """Install robust visible GUI patches on ``ClearanceGui``."""
 
     cls = getattr(gui_module, "ClearanceGui", None)
     if cls is None:
@@ -79,6 +74,7 @@ def _patch_gui_module(gui_module: Any) -> None:
             original_init = getattr(cls, _ORIGINAL_INIT_ATTR)
             original_init(self, *args, **kwargs)
             _add_checkbox_to_overview(gui_module, self)
+            _move_main_controls_to_header(gui_module, self)
 
         cls.__init__ = patched_init
 
@@ -89,6 +85,7 @@ def _patch_gui_module(gui_module: Any) -> None:
             original_create_tab = getattr(cls, _ORIGINAL_CREATE_TAB_ATTR)
             original_create_tab(self, parent)
             _add_checkbox_to_overview(gui_module, self)
+            _move_main_controls_to_header(gui_module, self)
 
         cls._create_voltage_guessing_tab = patched_create_tab
 
@@ -116,6 +113,7 @@ def _patch_gui_module(gui_module: Any) -> None:
             if raw is not None:
                 _ensure_checkbox_var(gui_module, self).set(_coerce_bool(raw))
             _add_checkbox_to_overview(gui_module, self)
+            _move_main_controls_to_header(gui_module, self)
 
         cls._apply_voltage_guessing_settings = patched_apply_settings
 
@@ -197,6 +195,7 @@ def _wrap_assignment_mutator_once(gui_module: Any, cls: Any, method_name: str) -
     def wrapped(self: Any, *args: Any, **kwargs: Any) -> Any:
         result = original(self, *args, **kwargs)
         _add_checkbox_to_overview(gui_module, self)
+        _move_main_controls_to_header(gui_module, self)
         changed = self._apply_default_zone1_to_unassigned_assignments()
         if changed:
             _save_zone1_default_state(self)
@@ -314,6 +313,125 @@ def _add_checkbox_to_overview(gui_module: Any, gui: Any) -> None:
         wraplength=900,
     ).pack(side=left)
     gui._zone1_default_control_added = True
+
+
+def _safe_widget_text(widget: Any) -> str:
+    try:
+        return str(widget.cget("text") or "")
+    except Exception:
+        return ""
+
+
+def _safe_widget_state(widget: Any, default: str = "normal") -> str:
+    try:
+        return str(widget.cget("state") or default)
+    except Exception:
+        return default
+
+
+def _remove_original_action_buttons(gui: Any) -> None:
+    """Remove the old action buttons from the input/options card.
+
+    The options row should keep checkboxes such as Include $NONE$, Effective
+    Net-to-Net distance, and Dark theme. Only the four action buttons are
+    removed and recreated in the app header.
+    """
+
+    run_button = getattr(gui, "run_button", None)
+    try:
+        original_parent = run_button.master
+    except Exception:
+        return
+
+    try:
+        children = list(original_parent.winfo_children())
+    except Exception:
+        children = []
+    for child in children:
+        if _safe_widget_text(child) in _HEADER_ACTION_TEXTS:
+            try:
+                child.destroy()
+            except Exception:
+                pass
+
+
+def _move_main_controls_to_header(gui_module: Any, gui: Any) -> None:
+    """Move Run/Stop/Open/Geometry actions from the options row to the app header."""
+
+    if getattr(gui, "_main_control_buttons_in_header", False):
+        return
+
+    progress = getattr(gui, "progress", None)
+    old_run_button = getattr(gui, "run_button", None)
+    old_stop_button = getattr(gui, "stop_button", None)
+    if progress is None or old_run_button is None or old_stop_button is None:
+        return
+
+    try:
+        status_panel = progress.master
+        appbar = status_panel.master
+    except Exception:
+        return
+
+    run_state = _safe_widget_state(old_run_button, "normal")
+    stop_state = _safe_widget_state(old_stop_button, "disabled")
+    _remove_original_action_buttons(gui)
+
+    ttk = gui_module.ttk
+    left = getattr(gui_module, "LEFT", "left")
+    x_fill = getattr(gui_module, "X", "x")
+
+    try:
+        appbar.columnconfigure(0, weight=1)
+        appbar.columnconfigure(1, weight=0)
+        appbar.columnconfigure(2, weight=1)
+        status_panel.grid_configure(row=0, column=2, sticky="e", padx=(18, 0))
+    except Exception:
+        pass
+
+    controls = ttk.Frame(appbar, style="AppBar.TFrame")
+    try:
+        controls.grid(row=0, column=1, sticky="e", padx=(18, 18))
+    except Exception:
+        controls.pack(side=left, padx=(18, 18), fill=x_fill)
+
+    gui.run_button = ttk.Button(
+        controls,
+        text="Run analysis",
+        style="Primary.TButton",
+        command=gui._start_analysis,
+    )
+    gui.run_button.pack(side=left, padx=(0, 6))
+    try:
+        gui.run_button.configure(state=run_state)
+    except Exception:
+        pass
+
+    gui.stop_button = ttk.Button(
+        controls,
+        text="Stop",
+        style="Danger.TButton",
+        command=gui._stop_analysis,
+    )
+    gui.stop_button.pack(side=left, padx=(0, 6))
+    try:
+        gui.stop_button.configure(state=stop_state)
+    except Exception:
+        pass
+
+    ttk.Button(
+        controls,
+        text="Open output",
+        command=gui._open_output_folder,
+    ).pack(side=left, padx=(0, 6))
+    ttk.Button(
+        controls,
+        text="Geometry viewer",
+        command=gui._open_geometry_viewer_overview,
+    ).pack(side=left)
+
+    gui._header_control_row = controls
+    gui._main_control_buttons_in_header = True
 
 
 def _coerce_bool(value: object) -> bool:
