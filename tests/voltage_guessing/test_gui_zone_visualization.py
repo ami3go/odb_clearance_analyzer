@@ -65,6 +65,17 @@ def _fake_result():
     )
 
 
+def test_patch_gui_ignores_partial_gui_module_before_clearancegui_exists(monkeypatch):
+    import odb_clearance_analyzer.gui_zone_visualization as zone_vis
+
+    calls = []
+    monkeypatch.setattr(zone_vis, "_patch_geometry_viewer", lambda: calls.append("geometry"))
+
+    zone_vis._patch_gui(SimpleNamespace())
+
+    assert calls == []
+
+
 def test_geometry_viewer_show_zones_colors_all_visible_nets_by_assignment(root):
     from odb_clearance_analyzer.geometry_viewer import GeometryViewer
     from odb_clearance_analyzer.gui_zone_visualization import ZONE_COLORS
