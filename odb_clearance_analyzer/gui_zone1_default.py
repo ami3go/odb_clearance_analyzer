@@ -17,6 +17,7 @@ _ORIGINAL_MUTATOR_PREFIX = "_zone1_default_original_"
 _CHECKBOX_TEXT = "Assign all unassigned nets to Zone 1 automatically"
 _SETTING_KEY = "default_all_nets_to_zone_1"
 _HEADER_ACTION_TEXTS = {"Run analysis", "Stop", "Open output", "Geometry viewer"}
+_HEADER_RUN_STYLE = "HeaderRun.TButton"
 
 
 def main() -> None:
@@ -355,10 +356,60 @@ def _remove_original_action_buttons(gui: Any) -> None:
                 pass
 
 
+def _configure_header_button_styles(gui_module: Any, gui: Any) -> None:
+    """Create a high-contrast Run button style for the purple app header."""
+
+    ttk = gui_module.ttk
+    colors = getattr(gui_module, "MATERIAL_COLORS", {}) or {}
+    try:
+        style = ttk.Style(getattr(gui, "master", None))
+    except Exception:
+        try:
+            style = ttk.Style()
+        except Exception:
+            return
+
+    background = colors.get("surface", "#FFFFFF")
+    foreground = colors.get("primary_dark", colors.get("primary", "#4F378B"))
+    active_background = colors.get("primary_container", "#EADDFF")
+    disabled_background = colors.get("outline_variant", "#E7E0EC")
+    disabled_foreground = colors.get("muted", "#49454F")
+    border = colors.get("on_primary", "#FFFFFF")
+
+    style.configure(
+        _HEADER_RUN_STYLE,
+        background=background,
+        foreground=foreground,
+        padding=(18, 9),
+        borderwidth=1,
+        relief="raised",
+        font=("Segoe UI", 10, "bold"),
+        bordercolor=border,
+        lightcolor=border,
+        darkcolor=border,
+    )
+    style.map(
+        _HEADER_RUN_STYLE,
+        background=[
+            ("active", active_background),
+            ("pressed", active_background),
+            ("disabled", disabled_background),
+        ],
+        foreground=[("disabled", disabled_foreground)],
+    )
+
+
 def _move_main_controls_to_header(gui_module: Any, gui: Any) -> None:
     """Move Run/Stop/Open/Geometry actions from the options row to the app header."""
 
     if getattr(gui, "_main_control_buttons_in_header", False):
+        # Existing header controls may have been created by an older install;
+        # refresh the Run button style so it remains visible on the app bar.
+        _configure_header_button_styles(gui_module, gui)
+        try:
+            gui.run_button.configure(style=_HEADER_RUN_STYLE)
+        except Exception:
+            pass
         return
 
     progress = getattr(gui, "progress", None)
@@ -376,6 +427,7 @@ def _move_main_controls_to_header(gui_module: Any, gui: Any) -> None:
     run_state = _safe_widget_state(old_run_button, "normal")
     stop_state = _safe_widget_state(old_stop_button, "disabled")
     _remove_original_action_buttons(gui)
+    _configure_header_button_styles(gui_module, gui)
 
     ttk = gui_module.ttk
     left = getattr(gui_module, "LEFT", "left")
@@ -398,7 +450,7 @@ def _move_main_controls_to_header(gui_module: Any, gui: Any) -> None:
     gui.run_button = ttk.Button(
         controls,
         text="Run analysis",
-        style="Primary.TButton",
+        style=_HEADER_RUN_STYLE,
         command=gui._start_analysis,
     )
     gui.run_button.pack(side=left, padx=(0, 6))
