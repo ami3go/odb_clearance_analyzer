@@ -30,4 +30,4 @@ install_zone_reset_value_support()
 install_zone_matrix_duplicate_mask_support()
 install_zone_visualization_support()
 
-__version__ = "0.4.55"
+__version__ = "0.4.56"
