@@ -64,17 +64,40 @@ def test_default_zone1_checkbox_visible_and_applies_only_to_blank_zones(root, tm
     assert gui.voltage_store.assignments["ISO_SIG"].galvanic_zone == GALVANIC_ZONE_2
 
 
-def test_main_action_buttons_are_in_header_not_input_row(root):
+def test_main_action_buttons_are_in_header_with_combined_run_stop_button(root):
     from odb_clearance_analyzer.gui import ClearanceGui
 
     gui = ClearanceGui(root)
 
     assert getattr(gui, "_main_control_buttons_in_header", False) is True
     assert getattr(gui, "_header_control_row", None) is not None
+    assert getattr(gui, "run_stop_button", None) is not None
+    assert gui.run_stop_button.master is gui._header_control_row
     assert gui.run_button.master is gui._header_control_row
     assert gui.stop_button.master is gui._header_control_row
-    assert str(gui.run_button.cget("style")) == "HeaderRun.TButton"
+    assert str(gui.run_stop_button.cget("style")) == "HeaderRun.TButton"
+    assert str(gui.run_stop_button.cget("text")) == "Run analysis"
 
     texts = _widget_texts(gui)
-    for label in ("Run analysis", "Stop", "Open output", "Geometry viewer"):
-        assert texts.count(label) == 1
+    assert texts.count("Run analysis") == 1
+    assert texts.count("Stop") == 0
+    assert texts.count("Open output") == 1
+    assert texts.count("Geometry viewer") == 1
+
+    # Old two-button state updates must drive the same visible button.
+    gui.run_button.configure(state="disabled")
+    gui.stop_button.configure(state="normal")
+    assert str(gui.run_stop_button.cget("text")) == "Stop"
+    assert str(gui.run_stop_button.cget("style")) == "Danger.TButton"
+    assert str(gui.run_stop_button.cget("state")) == "normal"
+
+    # Pressing Stop disables the same button while cancellation is requested.
+    gui.stop_button.configure(state="disabled")
+    assert str(gui.run_stop_button.cget("text")) == "Stop"
+    assert str(gui.run_stop_button.cget("state")) == "disabled"
+
+    # Finishing analysis returns the same button to Run mode.
+    gui.run_button.configure(state="normal")
+    assert str(gui.run_stop_button.cget("text")) == "Run analysis"
+    assert str(gui.run_stop_button.cget("style")) == "HeaderRun.TButton"
+    assert str(gui.run_stop_button.cget("state")) == "normal"
