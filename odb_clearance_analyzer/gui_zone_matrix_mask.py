@@ -7,11 +7,12 @@ import sys
 from typing import Any
 
 
-_PATCHED_ATTR = "_zone_matrix_duplicate_mask_installed_v2"
+_PATCHED_ATTR = "_zone_matrix_duplicate_mask_installed_v3"
 _ORIGINAL_BUILD_ATTR = "_zone_matrix_duplicate_mask_original_build_tab"
 _ORIGINAL_INIT_ATTR = "_zone_matrix_duplicate_mask_original_init"
+_ORIGINAL_SETTINGS_FROM_GUI_ATTR = "_zone_matrix_duplicate_mask_original_settings_from_gui"
 _IMPORT_HOOK_ATTR = "_odb_zone_matrix_duplicate_mask_import_hook"
-_MASK_APPLIED_ATTR = "_zone_matrix_duplicate_mask_applied_v2"
+_MASK_APPLIED_ATTR = "_zone_matrix_duplicate_mask_applied_v3"
 MASK_TEXT = "—"
 
 
@@ -19,6 +20,8 @@ def install_zone_matrix_duplicate_mask_support() -> None:
     """Install duplicate-cell masking for the 10x10 zone matrix."""
 
     from . import gui_multi_zone as multi_zone
+
+    _patch_matrix_settings_source(multi_zone)
 
     if not getattr(multi_zone, _PATCHED_ATTR, False):
         original_build = getattr(multi_zone, "_build_tab", None)
@@ -52,6 +55,85 @@ def install_zone_matrix_duplicate_mask_support() -> None:
 
     setattr(hook, _IMPORT_HOOK_ATTR, True)
     builtins.__import__ = hook
+
+
+def _patch_matrix_settings_source(multi_zone: Any) -> None:
+    """Make the visible lower triangle the source of truth for saved/report settings.
+
+    The multi-zone table initially used the upper triangle as the editable half.
+    After the UI was changed to mask the top/upper triangle, the extraction code
+    must prefer the lower-triangle variables; otherwise a user edit in the only
+    visible editable cell could be overwritten by the hidden mirrored value before
+    reports are generated.
+    """
+
+    if hasattr(multi_zone, _ORIGINAL_SETTINGS_FROM_GUI_ATTR):
+        return
+
+    original_settings_from_gui = getattr(multi_zone, "_settings_from_gui", None)
+    if not callable(original_settings_from_gui):
+        return
+
+    setattr(multi_zone, _ORIGINAL_SETTINGS_FROM_GUI_ATTR, original_settings_from_gui)
+
+    def lower_triangle_settings_from_gui(gui: Any) -> dict[str, object]:
+        labels = tuple(getattr(multi_zone, "ZONE_LABELS", ()))
+        matrix_key = getattr(multi_zone, "ZONE_MATRIX_KEY", "zone_to_zone_voltage_matrix")
+        vars_map = getattr(gui, "voltage_zone_matrix_vars", None)
+
+        # Snapshot editable lower-triangle values before calling the original
+        # settings builder.  The original builder may still mirror the old upper
+        # triangle into the lower triangle, so reading after it would be too late.
+        lower_values: dict[tuple[str, str], object] = {}
+        if vars_map and labels:
+            for row_index, zone_a in enumerate(labels):
+                for col_index, zone_b in enumerate(labels):
+                    if row_index <= col_index:
+                        continue
+                    var = vars_map.get((zone_a, zone_b))
+                    if var is None:
+                        continue
+                    try:
+                        lower_values[(zone_a, zone_b)] = var.get()
+                    except Exception:
+                        pass
+
+        settings = dict(original_settings_from_gui(gui))
+        if not vars_map or not labels or not lower_values:
+            return settings
+
+        try:
+            fallback = multi_zone._legacy_voltage(gui)
+        except Exception:
+            fallback = getattr(multi_zone, "DEFAULT_ZONE_VOLTAGE", 1000.0)
+
+        matrix = settings.get(matrix_key)
+        if not isinstance(matrix, dict):
+            matrix = multi_zone.normalize_matrix(settings, fallback)
+        else:
+            matrix = multi_zone.normalize_matrix({matrix_key: matrix, **settings}, fallback)
+
+        for (zone_a, zone_b), raw_value in lower_values.items():
+            old_value = matrix.get(zone_a, {}).get(zone_b, fallback)
+            value = multi_zone.valid_voltage(raw_value, old_value)
+            matrix[zone_a][zone_b] = value
+            matrix[zone_b][zone_a] = value
+            try:
+                vars_map[(zone_a, zone_b)].set(f"{value:g}")
+                vars_map[(zone_b, zone_a)].set(f"{value:g}")
+            except Exception:
+                pass
+
+        for zone in labels:
+            matrix[zone][zone] = 0.0
+
+        zone12 = matrix["Zone 1"]["Zone 2"]
+        settings[matrix_key] = matrix
+        settings["galvanic_zone_voltage_v"] = zone12
+        settings["zone_to_zone_voltage_v"] = zone12
+        return settings
+
+    multi_zone._settings_from_gui = lower_triangle_settings_from_gui
 
 
 def _patch_gui_init(gui_module: Any) -> None:
