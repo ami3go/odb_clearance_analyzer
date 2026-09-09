@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "odb-clearance-analyzer"
-version = "0.4.39"
+version = "0.4.40"
 description = "ODB++ net-to-net copper clearance analyzer with Tkinter GUI and report export"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -36,7 +36,7 @@ dev = [
 
 [project.scripts]
 odb-clearance-analyzer = "odb_clearance_analyzer.cli:main"
-odb-clearance-gui = "odb_clearance_analyzer.gui:main"
+odb-clearance-gui = "odb_clearance_analyzer.gui_zone1_default:main"
 
 [tool.setuptools]
 packages = ["odb_clearance_analyzer", "odb_clearance_analyzer.voltage_guessing"]
