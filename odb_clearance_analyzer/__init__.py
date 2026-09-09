@@ -22,4 +22,4 @@ install_zone1_default_gui_patch()
 install_report_tab_layout_patch()
 install_multi_zone_support()
 
-__version__ = "0.4.48"
+__version__ = "0.4.49"
