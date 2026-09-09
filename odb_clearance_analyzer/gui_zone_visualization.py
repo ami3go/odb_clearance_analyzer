@@ -28,8 +28,8 @@ ZONE_COLORS: dict[str, str] = {
 UNASSIGNED_ZONE_COLOR = "#9E9E9E"
 UNASSIGNED_ZONE_LABEL = "Unassigned"
 
-_GEOMETRY_PATCHED_ATTR = "_zone_visualization_geometry_patch_installed_v1"
-_GUI_PATCHED_ATTR = "_zone_visualization_gui_patch_installed_v1"
+_GEOMETRY_PATCHED_ATTR = "_zone_visualization_geometry_patch_installed_v2"
+_GUI_PATCHED_ATTR = "_zone_visualization_gui_patch_installed_v2"
 _ORIGINAL_GEOMETRY_INIT_ATTR = "_zone_visualization_original_geometry_init"
 _ORIGINAL_SELECTED_ATTR = "_zone_visualization_original_selected_geometries"
 _ORIGINAL_STYLE_ATTR = "_zone_visualization_original_style_for_role"
@@ -39,14 +39,19 @@ _IMPORT_HOOK_ATTR = "_odb_zone_visualization_import_hook"
 _MAIN_BUTTON_ATTR = "_zone_visualization_main_button_added"
 _VIEWER_BUTTON_ATTR = "_zone_visualization_viewer_button_added"
 
+_GEOMETRY_PATCHING = False
+_GUI_PATCHING = False
+
 
 def install_zone_visualization_support() -> None:
     """Patch GeometryViewer and add Show zones launch controls."""
 
+    # GeometryViewer is safe to patch before gui.py imports it.  ClearanceGui is
+    # patched later by the import hook, but only after the class exists.
     _patch_geometry_viewer()
 
     module = sys.modules.get("odb_clearance_analyzer.gui")
-    if module is not None:
+    if module is not None and getattr(module, "ClearanceGui", None) is not None:
         _patch_gui(module)
         return
 
@@ -57,7 +62,10 @@ def install_zone_visualization_support() -> None:
     def hook(name: str, globals=None, locals=None, fromlist=(), level: int = 0):  # type: ignore[override]
         result = current_import(name, globals, locals, fromlist, level)
         module = sys.modules.get("odb_clearance_analyzer.gui")
-        if module is not None:
+        # Do not patch gui.py while it is only partially imported.  Patching a
+        # partial module is what previously re-entered while importing
+        # geometry_viewer and produced an infinite hook loop on Windows.
+        if module is not None and getattr(module, "ClearanceGui", None) is not None:
             _patch_gui(module)
             if builtins.__import__ is hook:
                 builtins.__import__ = current_import
@@ -112,7 +120,19 @@ def _assignment_map(assignments: Any) -> dict[str, str]:
 
 
 def _patch_geometry_viewer() -> None:
-    from . import geometry_viewer as viewer_module
+    global _GEOMETRY_PATCHING
+
+    if _GEOMETRY_PATCHING:
+        return
+    module = sys.modules.get("odb_clearance_analyzer.geometry_viewer")
+    if module is not None:
+        viewer_module = module
+    else:
+        _GEOMETRY_PATCHING = True
+        try:
+            from . import geometry_viewer as viewer_module
+        finally:
+            _GEOMETRY_PATCHING = False
 
     cls = getattr(viewer_module, "GeometryViewer", None)
     if cls is None or getattr(cls, _GEOMETRY_PATCHED_ATTR, False):
@@ -350,25 +370,34 @@ def _add_viewer_show_zones_button(viewer_module: Any, viewer: Any) -> None:
 
 
 def _patch_gui(gui_module: Any) -> None:
-    _patch_geometry_viewer()
+    global _GUI_PATCHING
+
+    if _GUI_PATCHING:
+        return
     cls = getattr(gui_module, "ClearanceGui", None)
     if cls is None or getattr(cls, _GUI_PATCHED_ATTR, False):
         return
 
-    if not hasattr(cls, "_open_zone_geometry_viewer"):
-        cls._open_zone_geometry_viewer = _open_zone_geometry_viewer
+    _GUI_PATCHING = True
+    try:
+        _patch_geometry_viewer()
 
-    if not hasattr(cls, _ORIGINAL_GUI_INIT_ATTR):
-        setattr(cls, _ORIGINAL_GUI_INIT_ATTR, cls.__init__)
+        if not hasattr(cls, "_open_zone_geometry_viewer"):
+            cls._open_zone_geometry_viewer = _open_zone_geometry_viewer
 
-        def init(self: Any, *args: Any, **kwargs: Any) -> None:
-            getattr(cls, _ORIGINAL_GUI_INIT_ATTR)(self, *args, **kwargs)
-            _install_zone_assignment_provider(self)
-            _add_main_show_zones_button(gui_module, self)
+        if not hasattr(cls, _ORIGINAL_GUI_INIT_ATTR):
+            setattr(cls, _ORIGINAL_GUI_INIT_ATTR, cls.__init__)
 
-        cls.__init__ = init
+            def init(self: Any, *args: Any, **kwargs: Any) -> None:
+                getattr(cls, _ORIGINAL_GUI_INIT_ATTR)(self, *args, **kwargs)
+                _install_zone_assignment_provider(self)
+                _add_main_show_zones_button(gui_module, self)
 
-    setattr(cls, _GUI_PATCHED_ATTR, True)
+            cls.__init__ = init
+
+        setattr(cls, _GUI_PATCHED_ATTR, True)
+    finally:
+        _GUI_PATCHING = False
 
 
 def _install_zone_assignment_provider(gui: Any) -> None:
@@ -384,7 +413,6 @@ def _open_zone_geometry_viewer(self: Any):
     """Open Geometry Viewer directly in full-board zone-color mode."""
 
     if getattr(self, "last_result", None) is None:
-        self.messagebox.showinfo("Geometry viewer", "Run analysis first, then show zones.") if hasattr(self, "messagebox") else None
         try:
             from tkinter import messagebox
 
