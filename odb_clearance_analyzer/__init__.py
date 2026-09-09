@@ -11,11 +11,11 @@ __all__ = [
     "AnalysisResult",
     "ClearanceAnalyzer",
     "EffectiveAirGapRecord",
-    "FeatureAttributeRecord",
     "MeasurementRecord",
+    "PerNetMinimum",
 ]
 
 enable_timestamped_report_runs(ClearanceAnalyzer)
 install_zone1_default_gui_patch()
 
-__version__ = "0.4.41"
+__version__ = "0.4.42"
