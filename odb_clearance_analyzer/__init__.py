@@ -11,8 +11,8 @@ __all__ = [
     "AnalysisResult",
     "ClearanceAnalyzer",
     "EffectiveAirGapRecord",
+    "FeatureAttributeRecord",
     "MeasurementRecord",
-    "PerNetMinimum",
 ]
 
 enable_timestamped_report_runs(ClearanceAnalyzer)
