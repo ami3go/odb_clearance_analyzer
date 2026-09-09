@@ -26,7 +26,7 @@ def _stub_modals(monkeypatch):
     monkeypatch.setattr(simpledialog, "askstring", lambda *a, **k: "test")
 
 
-def test_zone_matrix_duplicate_cells_are_masked(root):
+def test_zone_matrix_top_duplicate_cells_are_masked(root):
     from odb_clearance_analyzer.gui import ClearanceGui
     from odb_clearance_analyzer.gui_multi_zone import ZONE_LABELS, ZONE_MATRIX_KEY
     from odb_clearance_analyzer.gui_zone_matrix_mask import MASK_TEXT
@@ -42,12 +42,12 @@ def test_zone_matrix_duplicate_cells_are_masked(root):
     assert len(gui.voltage_zone_matrix_diagonal_entries) == 10
 
     for (row, col), entry in gui.voltage_zone_matrix_masked_duplicate_entries.items():
-        assert row > col
+        assert row < col
         assert str(entry.cget("state")) == "disabled"
         assert str(entry.get()) == MASK_TEXT
 
     for (row, col), entry in gui.voltage_zone_matrix_editable_entries.items():
-        assert row < col
+        assert row > col
         assert str(entry.cget("state")) == "normal"
 
     for (row, col), entry in gui.voltage_zone_matrix_diagonal_entries.items():
@@ -56,8 +56,9 @@ def test_zone_matrix_duplicate_cells_are_masked(root):
         assert str(entry.get()) == "0"
 
     # Masking is visual only. The underlying matrix variables remain complete
-    # and symmetric for resolver/export code.
-    gui.voltage_zone_matrix_vars[("Zone 1", "Zone 4")].set("640")
+    # and symmetric for resolver/export code. With top cells masked, the lower
+    # triangle is the editable source of truth.
+    gui.voltage_zone_matrix_vars[("Zone 4", "Zone 1")].set("640")
     settings = gui._current_voltage_guessing_settings()
     assert settings[ZONE_MATRIX_KEY]["Zone 1"]["Zone 4"] == 640.0
     assert settings[ZONE_MATRIX_KEY]["Zone 4"]["Zone 1"] == 640.0
