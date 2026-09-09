@@ -26,13 +26,28 @@ def _stub_modals(monkeypatch):
     monkeypatch.setattr(simpledialog, "askstring", lambda *a, **k: "test")
 
 
-def test_default_zone1_checkbox_applies_only_to_blank_zones(root, tmp_path):
+def _widget_texts(widget):
+    texts = []
+    try:
+        text = widget.cget("text")
+    except Exception:
+        text = ""
+    if text:
+        texts.append(str(text))
+    for child in widget.winfo_children():
+        texts.extend(_widget_texts(child))
+    return texts
+
+
+def test_default_zone1_checkbox_visible_and_applies_only_to_blank_zones(root, tmp_path):
     from odb_clearance_analyzer.gui import ClearanceGui
     from odb_clearance_analyzer.voltage_guessing import load_rule_pack, review_service
     from odb_clearance_analyzer.voltage_guessing.galvanic_zones import GALVANIC_ZONE_1, GALVANIC_ZONE_2
 
     gui = ClearanceGui(root)
     gui.output_dir.set(str(tmp_path))
+
+    assert "Assign all unassigned nets to Zone 1 by default" in _widget_texts(gui)
     assert hasattr(gui, "voltage_default_all_nets_zone1")
     assert hasattr(gui, "_apply_default_all_nets_zone1_setting")
 
