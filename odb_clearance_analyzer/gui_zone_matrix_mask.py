@@ -7,11 +7,11 @@ import sys
 from typing import Any
 
 
-_PATCHED_ATTR = "_zone_matrix_duplicate_mask_installed_v1"
+_PATCHED_ATTR = "_zone_matrix_duplicate_mask_installed_v2"
 _ORIGINAL_BUILD_ATTR = "_zone_matrix_duplicate_mask_original_build_tab"
 _ORIGINAL_INIT_ATTR = "_zone_matrix_duplicate_mask_original_init"
 _IMPORT_HOOK_ATTR = "_odb_zone_matrix_duplicate_mask_import_hook"
-_MASK_APPLIED_ATTR = "_zone_matrix_duplicate_mask_applied"
+_MASK_APPLIED_ATTR = "_zone_matrix_duplicate_mask_applied_v2"
 MASK_TEXT = "—"
 
 
@@ -72,13 +72,13 @@ def _patch_gui_init(gui_module: Any) -> None:
 
 
 def mask_zone_matrix_duplicate_fields(gui_module: Any, gui: Any) -> None:
-    """Disable and visually mask lower-triangle duplicate matrix entries.
+    """Disable and visually mask upper-triangle duplicate matrix entries.
 
-    The zone matrix is symmetric.  The editable source of truth is the upper
-    triangle, where column index is greater than row index.  The lower triangle
-    would duplicate the same Zone A <-> Zone B pairs, so those fields are shown
-    as disabled placeholders.  The underlying matrix variables are not removed;
-    resolver/export code still sees a complete 10x10 matrix.
+    The zone matrix is symmetric.  The editable source of truth is the lower
+    triangle, where row index is greater than column index.  The upper/top
+    triangle duplicates the same Zone A <-> Zone B pairs, so those fields are
+    shown as disabled placeholders.  The underlying matrix variables are not
+    removed; resolver/export code still sees a complete 10x10 matrix.
     """
 
     if getattr(gui, _MASK_APPLIED_ATTR, False):
@@ -116,7 +116,7 @@ def mask_zone_matrix_duplicate_fields(gui_module: Any, gui: Any) -> None:
             except Exception:
                 pass
             diagonal[(row, col)] = child
-        elif row > col:
+        elif row < col:
             mask_var = string_var(value=MASK_TEXT)
             try:
                 child.configure(textvariable=mask_var, state="disabled", justify="center")
@@ -142,7 +142,7 @@ def mask_zone_matrix_duplicate_fields(gui_module: Any, gui: Any) -> None:
         note_parent = table.master
         note = ttk.Label(
             note_parent,
-            text="Duplicate lower-triangle cells are masked; edit only the upper triangle. Diagonal cells stay 0 V.",
+            text="Duplicate upper/top-triangle cells are masked; edit only the lower triangle. Diagonal cells stay 0 V.",
             style="Muted.TLabel",
             wraplength=1100,
         )
