@@ -8,6 +8,7 @@ from .gui_multi_zone import install_multi_zone_support
 from .gui_zones_scroll import install_zones_tab_scroll_support
 from .gui_zone_reset_value import install_zone_reset_value_support
 from .gui_zone_matrix_mask import install_zone_matrix_duplicate_mask_support
+from .gui_zone_visualization import install_zone_visualization_support
 from .models import AnalysisCancelled, AnalysisConfig, AnalysisResult, EffectiveAirGapRecord, FeatureAttributeRecord, MeasurementRecord
 
 __all__ = [
@@ -27,5 +28,6 @@ install_multi_zone_support()
 install_zones_tab_scroll_support()
 install_zone_reset_value_support()
 install_zone_matrix_duplicate_mask_support()
+install_zone_visualization_support()
 
-__version__ = "0.4.54"
+__version__ = "0.4.55"
