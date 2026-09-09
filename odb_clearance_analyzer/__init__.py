@@ -18,4 +18,4 @@ __all__ = [
 enable_timestamped_report_runs(ClearanceAnalyzer)
 install_zone1_default_gui_patch()
 
-__version__ = "0.4.40"
+__version__ = "0.4.41"
