@@ -32,4 +32,4 @@ install_zone_matrix_duplicate_mask_support()
 install_zone_visualization_support()
 install_zone_button_visibility_support()
 
-__version__ = "0.4.57"
+__version__ = "0.4.58"
