@@ -1,8 +1,8 @@
-"""High-contrast styling for Show zones buttons.
+"""Shared header-button styling and app-header title cleanup.
 
-The zone-visualization action can be placed in the purple app header.  A normal
-Primary.TButton may blend into that app-bar background on some Tk themes, so this
-module applies explicit high-contrast button styles after the buttons are built.
+Keep the visible app-bar controls consistent.  The detailed application version
+belongs in the operating-system window title bar; the large in-app header uses a
+clean product title without repeating the version number.
 """
 
 from __future__ import annotations
@@ -12,11 +12,19 @@ import sys
 from typing import Any
 
 
-ZONE_HEADER_BUTTON_STYLE = "ZoneHeader.TButton"
-ZONE_VIEWER_BUTTON_STYLE = "ZoneViewer.TButton"
+HEADER_BUTTON_STYLE = "HeaderRun.TButton"
+VIEWER_BUTTON_STYLE = "TButton"
+HEADER_BUTTON_TEXTS = {
+    "Run analysis",
+    "Stop",
+    "Open output",
+    "Geometry viewer",
+    "Show zones",
+}
+APP_HEADER_TITLE = "ODB++ Clearance Analyzer"
 
-_GUI_PATCHED_ATTR = "_zone_button_visibility_gui_patch_installed_v1"
-_VIEWER_PATCHED_ATTR = "_zone_button_visibility_viewer_patch_installed_v1"
+_GUI_PATCHED_ATTR = "_zone_button_visibility_gui_patch_installed_v2"
+_VIEWER_PATCHED_ATTR = "_zone_button_visibility_viewer_patch_installed_v2"
 _ORIGINAL_GUI_INIT_ATTR = "_zone_button_visibility_original_gui_init"
 _ORIGINAL_VIEWER_INIT_ATTR = "_zone_button_visibility_original_viewer_init"
 _IMPORT_HOOK_ATTR = "_odb_zone_button_visibility_import_hook"
@@ -25,7 +33,7 @@ _PATCHING_VIEWER = False
 
 
 def install_zone_button_visibility_support() -> None:
-    """Install visible Show-zones button styles for main GUI and viewer."""
+    """Install shared header button style and viewer toolbar normalization."""
 
     _patch_viewer_if_available()
 
@@ -68,7 +76,7 @@ def _patch_gui(gui_module: Any) -> None:
 
             def init(self: Any, *args: Any, **kwargs: Any) -> None:
                 getattr(cls, _ORIGINAL_GUI_INIT_ATTR)(self, *args, **kwargs)
-                _apply_main_show_zones_style(gui_module, self)
+                _apply_main_header_style_and_title(gui_module, self)
 
             cls.__init__ = init
 
@@ -105,37 +113,31 @@ def _patch_viewer_if_available() -> None:
         _PATCHING_VIEWER = False
 
 
-def _apply_main_show_zones_style(gui_module: Any, gui: Any) -> None:
+def _apply_main_header_style_and_title(gui_module: Any, gui: Any) -> None:
     ttk = getattr(gui_module, "ttk", None)
     if ttk is None:
         return
-    _configure_button_styles(ttk, getattr(gui, "master", None), getattr(gui_module, "MATERIAL_COLORS", {}) or {})
-    button = getattr(gui, "zone_visualization_button", None)
-    if button is None:
-        button = _find_button(gui, ttk, "Show zones")
-    if button is None:
-        return
-    try:
-        button.configure(style=ZONE_HEADER_BUTTON_STYLE)
-    except Exception:
-        pass
+    _configure_header_button_style(ttk, getattr(gui, "master", None), getattr(gui_module, "MATERIAL_COLORS", {}) or {})
+    _remove_version_from_header_title(gui, ttk)
+    _style_main_header_buttons(gui, ttk)
 
 
 def _apply_viewer_show_zones_style(viewer_module: Any, viewer: Any) -> None:
+    """Make the viewer Show-zones action look like the other viewer buttons."""
+
     ttk = getattr(viewer_module, "ttk", None)
     if ttk is None:
         return
-    _configure_button_styles(ttk, viewer, {})
     button = _find_button(viewer, ttk, "Show zones")
     if button is None:
         return
     try:
-        button.configure(style=ZONE_VIEWER_BUTTON_STYLE)
+        button.configure(style=VIEWER_BUTTON_STYLE)
     except Exception:
         pass
 
 
-def _configure_button_styles(ttk: Any, master: Any, colors: dict[str, str]) -> None:
+def _configure_header_button_style(ttk: Any, master: Any, colors: dict[str, str]) -> None:
     try:
         style = ttk.Style(master)
     except Exception:
@@ -144,58 +146,71 @@ def _configure_button_styles(ttk: Any, master: Any, colors: dict[str, str]) -> N
         except Exception:
             return
 
-    primary = colors.get("primary_dark", colors.get("primary", "#4F378B"))
-    primary_container = colors.get("primary_container", "#EADDFF")
-    outline = colors.get("on_primary", "#FFFFFF")
-    disabled_bg = colors.get("outline_variant", "#E7E0EC")
-    disabled_fg = colors.get("muted", "#49454F")
+    background = colors.get("surface", "#FFFFFF")
+    foreground = colors.get("primary_dark", colors.get("primary", "#4F378B"))
+    active_background = colors.get("primary_container", "#EADDFF")
+    disabled_background = colors.get("outline_variant", "#E7E0EC")
+    disabled_foreground = colors.get("muted", "#49454F")
+    border = colors.get("on_primary", "#FFFFFF")
 
-    # Main header: visible on the purple app bar.
     style.configure(
-        ZONE_HEADER_BUTTON_STYLE,
-        background="#FFFFFF",
-        foreground=primary,
-        padding=(16, 9),
-        borderwidth=2,
+        HEADER_BUTTON_STYLE,
+        background=background,
+        foreground=foreground,
+        padding=(18, 9),
+        borderwidth=1,
         relief="raised",
         font=("Segoe UI", 10, "bold"),
-        bordercolor=outline,
-        lightcolor=outline,
-        darkcolor=outline,
+        bordercolor=border,
+        lightcolor=border,
+        darkcolor=border,
     )
     style.map(
-        ZONE_HEADER_BUTTON_STYLE,
+        HEADER_BUTTON_STYLE,
         background=[
-            ("active", primary_container),
-            ("pressed", primary_container),
-            ("disabled", disabled_bg),
+            ("active", active_background),
+            ("pressed", active_background),
+            ("disabled", disabled_background),
         ],
-        foreground=[("disabled", disabled_fg)],
+        foreground=[("disabled", disabled_foreground)],
     )
 
-    # Viewer toolbar: use a bright zone-color accent so it is distinguishable
-    # from normal viewer actions.
-    style.configure(
-        ZONE_VIEWER_BUTTON_STYLE,
-        background="#FFD740",
-        foreground="#111318",
-        padding=(14, 8),
-        borderwidth=2,
-        relief="raised",
-        font=("Segoe UI", 9, "bold"),
-        bordercolor="#FFFFFF",
-        lightcolor="#FFFFFF",
-        darkcolor="#5F5100",
-    )
-    style.map(
-        ZONE_VIEWER_BUTTON_STYLE,
-        background=[
-            ("active", "#FFE082"),
-            ("pressed", "#FFC400"),
-            ("disabled", disabled_bg),
-        ],
-        foreground=[("disabled", disabled_fg)],
-    )
+
+def _remove_version_from_header_title(gui: Any, ttk: Any) -> None:
+    for widget in _walk(gui):
+        if not isinstance(widget, ttk.Label):
+            continue
+        try:
+            text = str(widget.cget("text") or "")
+            label_style = str(widget.cget("style") or "")
+        except Exception:
+            continue
+        if label_style == "AppBarTitle.TLabel" and text.startswith(APP_HEADER_TITLE):
+            try:
+                widget.configure(text=APP_HEADER_TITLE)
+            except Exception:
+                pass
+
+
+def _style_main_header_buttons(gui: Any, ttk: Any) -> None:
+    parent = getattr(gui, "_header_control_row", None)
+    if parent is not None:
+        widgets = list(getattr(parent, "winfo_children", lambda: [])())
+    else:
+        widgets = list(_walk(gui))
+
+    for widget in widgets:
+        if not isinstance(widget, ttk.Button):
+            continue
+        try:
+            text = str(widget.cget("text") or "")
+        except Exception:
+            text = ""
+        if text in HEADER_BUTTON_TEXTS:
+            try:
+                widget.configure(style=HEADER_BUTTON_STYLE)
+            except Exception:
+                pass
 
 
 def _find_button(root: Any, ttk: Any, text: str) -> Any | None:
